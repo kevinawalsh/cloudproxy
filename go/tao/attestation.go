@@ -53,12 +53,12 @@ func (a *Attestation) ValidSigner() (auth.Prin, error) {
 		if !ok {
 			return auth.Prin{}, newError("tao: the speaker of an attestation must be an auth.Prin")
 		}
-		pcrNums, pcrVals, err := extractPCRs(speaker)
+		pcrNums, pcrVals, err := ExtractPCRs(speaker)
 		if err != nil {
 			return auth.Prin{}, newError("tao: couldn't extract PCRs from the signer: %s", err)
 		}
 
-		pk, err := extractAIK(speaker)
+		pk, err := ExtractAIK(speaker)
 		if err != nil {
 			return auth.Prin{}, newError("tao: couldn't extract the AIK from the signer: %s", err)
 		}

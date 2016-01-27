@@ -57,11 +57,11 @@ func (client LinuxHostAdminClient) StartHostedProgram(spec *HostedProgramSpec) (
 		req.Stdin = proto.Int32(int32(len(fds)))
 		fds = append(fds, int(spec.Stdin.Fd()))
 	}
-	if spec.Stdin != nil {
+	if spec.Stdout != nil {
 		req.Stdout = proto.Int32(int32(len(fds)))
 		fds = append(fds, int(spec.Stdout.Fd()))
 	}
-	if spec.Stdin != nil {
+	if spec.Stderr != nil {
 		req.Stderr = proto.Int32(int32(len(fds)))
 		fds = append(fds, int(spec.Stderr.Fd()))
 	}
@@ -176,6 +176,7 @@ func NewLinuxHostAdminServer(host *LinuxHost) LinuxHostAdminServer {
 
 // Serve listens on sock for new connections and services them.
 func (server LinuxHostAdminServer) Serve(sock *net.UnixListener) error {
+	defer RecoverTPMResources()
 	// Set the socket to allow peer credentials to be passed
 	sockFile, err := sock.File()
 	if err != nil {
@@ -190,6 +191,7 @@ func (server LinuxHostAdminServer) Serve(sock *net.UnixListener) error {
 	connections := make(chan *net.UnixConn, 1)
 	errors := make(chan error, 1)
 	go func() {
+		defer RecoverTPMResources()
 		for {
 			conn, err := sock.AcceptUnix()
 			if err != nil {
@@ -216,19 +218,30 @@ func (server LinuxHostAdminServer) Serve(sock *net.UnixListener) error {
 		if err != nil {
 			return err
 		}
-		go s.ServeCodec(protorpc.NewServerCodec(oob))
+		go func() {
+			defer RecoverTPMResources()
+			s.ServeCodec(protorpc.NewServerCodec(oob))
+		}()
 	}
 }
 
 // StartHostedProgram is the server stub for LinuxHost.StartHostedProgram.
 func (server linuxHostAdminServerStub) StartHostedProgram(r *LinuxHostAdminRPCRequest, s *LinuxHostAdminRPCResponse) error {
+	defer RecoverTPMResources()
 	files := server.oob.SharedFiles()
 	defer func() {
 		for _, f := range files {
-			f.Close()
+			if f != nil {
+				f.Close()
+			}
 		}
 	}()
 	ucred := server.oob.PeerCred()
+	if ucred == nil {
+		// TODO(kwalsh): Some kernels don't pass a ucred. Figure this
+		// out later...
+		ucred = &syscall.Ucred{0, 0, 0}
+	}
 	if r.Path == nil {
 		return newError("missing path")
 	}
@@ -247,21 +260,25 @@ func (server linuxHostAdminServerStub) StartHostedProgram(r *LinuxHostAdminRPCRe
 			return newError("missing stdin")
 		}
 		spec.Stdin = files[*r.Stdin]
+		files[*r.Stdin] = nil
 	}
 	if r.Stdout != nil {
 		if int(*r.Stdout) >= len(files) {
 			return newError("missing stdout")
 		}
 		spec.Stdout = files[*r.Stdout]
+		files[*r.Stdout] = nil
 	}
 	if r.Stderr != nil {
 		if int(*r.Stderr) >= len(files) {
 			return newError("missing stderr")
 		}
 		spec.Stderr = files[*r.Stderr]
+		files[*r.Stderr] = nil
 	}
 	subprin, pid, err := server.lh.StartHostedProgram(spec)
 	if err != nil {
+		spec.Cleanup()
 		return err
 	}
 	s.Child = make([]*LinuxHostAdminRPCHostedProgram, 1)
@@ -274,7 +291,13 @@ func (server linuxHostAdminServerStub) StartHostedProgram(r *LinuxHostAdminRPCRe
 
 // StopHostedProgram is the server stub for LinuxHost.StopHostedProgram.
 func (server linuxHostAdminServerStub) StopHostedProgram(r *LinuxHostAdminRPCRequest, s *LinuxHostAdminRPCResponse) error {
+	defer RecoverTPMResources()
 	ucred := server.oob.PeerCred()
+	if ucred == nil {
+		// TODO(kwalsh): Some kernels don't pass a ucred. Figure this
+		// out later...
+		ucred = &syscall.Ucred{0, 0, 0}
+	}
 	// TODO(kwalsh): also authorize owner of child
 	if ucred.Uid != 0 && int(ucred.Uid) != os.Geteuid() {
 		return newError("unauthorized: only root or owner can stop hosted programs")
@@ -288,6 +311,7 @@ func (server linuxHostAdminServerStub) StopHostedProgram(r *LinuxHostAdminRPCReq
 
 // ListHostedPrograms is the server stub for LinuxHost.ListHostedPrograms.
 func (server linuxHostAdminServerStub) ListHostedPrograms(r *LinuxHostAdminRPCRequest, s *LinuxHostAdminRPCResponse) error {
+	defer RecoverTPMResources()
 	names, pids, err := server.lh.ListHostedPrograms()
 	if err != nil {
 		return err
@@ -307,6 +331,7 @@ func (server linuxHostAdminServerStub) ListHostedPrograms(r *LinuxHostAdminRPCRe
 
 // WaitHostedProgram is the server stub for LinuxHost.WaitHostedProgram.
 func (server linuxHostAdminServerStub) WaitHostedProgram(r *LinuxHostAdminRPCRequest, s *LinuxHostAdminRPCResponse) error {
+	defer RecoverTPMResources()
 	// ucred := server.oob.PeerCred()
 	// TODO(kwalsh): also authorize owner of child
 	// if ucred.Uid != 0 && int(ucred.Uid) != os.Geteuid() {
@@ -330,7 +355,13 @@ func (server linuxHostAdminServerStub) WaitHostedProgram(r *LinuxHostAdminRPCReq
 
 // KillHostedProgram is the server stub for LinuxHost.KillHostedProgram.
 func (server linuxHostAdminServerStub) KillHostedProgram(r *LinuxHostAdminRPCRequest, s *LinuxHostAdminRPCResponse) error {
+	defer RecoverTPMResources()
 	ucred := server.oob.PeerCred()
+	if ucred == nil {
+		// TODO(kwalsh): Some kernels don't pass a ucred. Figure this
+		// out later...
+		ucred = &syscall.Ucred{0, 0, 0}
+	}
 	// TODO(kwalsh): also authorize owner of child
 	if ucred.Uid != 0 && int(ucred.Uid) != os.Geteuid() {
 		return newError("unauthorized: only root or owner can kill hosted programs")
@@ -351,7 +382,13 @@ func (server linuxHostAdminServerStub) HostName(r *LinuxHostAdminRPCRequest, s *
 
 // Shutdown is the server stub for LinuxHost.Shutdown.
 func (server linuxHostAdminServerStub) Shutdown(r *LinuxHostAdminRPCRequest, s *LinuxHostAdminRPCResponse) error {
+	defer RecoverTPMResources()
 	ucred := server.oob.PeerCred()
+	if ucred == nil {
+		// TODO(kwalsh): Some kernels don't pass a ucred. Figure this
+		// out later...
+		ucred = &syscall.Ucred{0, 0, 0}
+	}
 	// TODO(kwalsh): also authorize owner of child
 	if ucred.Uid != 0 && int(ucred.Uid) != os.Geteuid() {
 		return newError("unauthorized: only root or owner can shut down linux_host")
