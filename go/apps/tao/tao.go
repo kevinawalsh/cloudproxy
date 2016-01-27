@@ -76,7 +76,7 @@ func main() {
 	// tao ==> show main help
 	// tao [commonopts] cmd [otheropts] ==> some_cmd [commonopts] [otheropts]
 
-	boolopts := []string{"quiet", "help"}
+	boolopts := []string{"quiet", "verbose", "help"}
 	valopts := []string{"tao_domain"}
 
 	flag.VisitAll(func(f *flag.Flag) {
@@ -135,11 +135,8 @@ func main() {
 
 	// Add a default --log_dir
 	logdir := os.TempDir() + "/tao_log"
-	if !util.IsDir(logdir) {
-		err := os.Mkdir(logdir, 0777)
+	if err := util.MkdirAll(logdir, 0777); err != nil {
 		options.FailIf(err, "Can't create log directory: %s", logdir)
-		err = os.Chmod(logdir, 0777)
-		options.FailIf(err, "Can't set permissions on log directory: %s", logdir)
 	}
 	arg := fmt.Sprintf("--log_dir=%s", logdir)
 	args = append([]string{arg}, args...)
