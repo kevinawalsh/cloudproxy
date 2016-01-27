@@ -71,9 +71,10 @@ type X509Details struct {
 	CommonName         *string `protobuf:"bytes,1,opt,name=common_name" json:"common_name,omitempty"`
 	Country            *string `protobuf:"bytes,2,opt,name=country" json:"country,omitempty"`
 	State              *string `protobuf:"bytes,3,opt,name=state" json:"state,omitempty"`
-	Organization       *string `protobuf:"bytes,4,opt,name=organization" json:"organization,omitempty"`
-	OrganizationalUnit *string `protobuf:"bytes,5,opt,name=organizational_unit" json:"organizational_unit,omitempty"`
-	SerialNumber       *int32  `protobuf:"varint,6,opt,name=serial_number" json:"serial_number,omitempty"`
+	City               *string `protobuf:"bytes,4,opt,name=city" json:"city,omitempty"`
+	Organization       *string `protobuf:"bytes,5,opt,name=organization" json:"organization,omitempty"`
+	OrganizationalUnit *string `protobuf:"bytes,6,opt,name=organizational_unit" json:"organizational_unit,omitempty"`
+	SerialNumber       *int32  `protobuf:"varint,7,opt,name=serial_number" json:"serial_number,omitempty"`
 	XXX_unrecognized   []byte  `json:"-"`
 }
 
@@ -98,6 +99,13 @@ func (m *X509Details) GetCountry() string {
 func (m *X509Details) GetState() string {
 	if m != nil && m.State != nil {
 		return *m.State
+	}
+	return ""
+}
+
+func (m *X509Details) GetCity() string {
+	if m != nil && m.City != nil {
+		return *m.City
 	}
 	return ""
 }

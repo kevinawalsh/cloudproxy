@@ -16,7 +16,7 @@ package main
 
 import (
 	"bufio"
-	"crypto/x509/pkix"
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"net"
@@ -48,9 +48,11 @@ func doRequest(guard tao.Guard, domain *tao.Domain, keys *tao.Keys) bool {
 	case "tcp":
 		conn, err = net.Dial(network, serverAddr)
 	case "tls":
-		conn, err = tao.DialTLSWithKeys(network, serverAddr, keys)
+		conf, err := keys.TLSClientConfig(nil)
+		options.FailIf(err, "client: couldn't encode TLS keys")
+		conn, err = tls.Dial(network, serverAddr, conf)
 	case "tao":
-		conn, err = tao.Dial(network, serverAddr, guard, domain.Keys.VerifyingKey, keys)
+		conn, err = tao.Dial(network, serverAddr, guard, domain.Keys.VerifyingKey, keys, nil)
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "client: error connecting to %s: %s\n", serverAddr, err.Error())
@@ -87,16 +89,8 @@ func newTempCAGuard(v *tao.Verifier) (tao.Guard, error) {
 
 func doClient(domain *tao.Domain) {
 	network := "tcp"
-	keys, err := tao.NewTemporaryTaoDelegatedKeys(tao.Signing, tao.Parent())
+	keys, err := tao.NewTemporaryTaoDelegatedKeys(tao.Signing, nil, tao.Parent())
 	options.FailIf(err, "client: couldn't generate temporary Tao keys")
-
-	// TODO(tmroeder): fix the name
-	cert, err := keys.SigningKey.CreateSelfSignedX509(&pkix.Name{
-		Organization: []string{"Google Tao Demo"}})
-	options.FailIf(err, "client: couldn't create a self-signed X.509 cert")
-
-	// TODO(kwalsh) keys should save cert on disk if keys are on disk
-	keys.Cert = cert
 
 	g := domain.Guard
 	if *ca != "" {

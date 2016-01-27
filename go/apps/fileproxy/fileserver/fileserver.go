@@ -39,17 +39,9 @@ func serve(addr, fp string, cert []byte, signingKey *tao.Keys, policy *fileproxy
 	if err != nil {
 		return err
 	}
-	pool := x509.NewCertPool()
-	pool.AddCert(policyCert)
-	tlsc, err := tao.EncodeTLSCert(signingKey)
+	conf, err := signingKey.TLSServerConfig(policyCert)
 	if err != nil {
 		return err
-	}
-	conf := &tls.Config{
-		RootCAs:            pool,
-		Certificates:       []tls.Certificate{*tlsc},
-		InsecureSkipVerify: false,
-		ClientAuth:         tls.RequireAnyClientCert,
 	}
 	log.Println("fileserver listening")
 	sock, err := tls.Listen("tcp", addr, conf)
@@ -118,8 +110,8 @@ func main() {
 	}
 
 	var policyCert []byte
-	if hostDomain.Keys.Cert != nil {
-		policyCert = hostDomain.Keys.Cert.Raw
+	if hostDomain.Keys.Cert["default"] != nil {
+		policyCert = hostDomain.Keys.Cert["default"].Raw
 	}
 	if policyCert == nil {
 		log.Fatalln("fileserver: can't retrieve policy cert")
@@ -140,19 +132,17 @@ func main() {
 	}
 
 	// Create or read the keys for fileclient.
-	fsKeys, err := tao.NewOnDiskTaoSealedKeys(tao.Signing|tao.Crypting, parentTao, *fileServerPath, tao.SealPolicyDefault)
-	if err != nil {
-		log.Fatalln("fileserver: couldn't set up the Tao-sealed keys:", err)
-	}
-
 	// Set up a temporary cert for communication with keyNegoServer.
-	fsKeys.Cert, err = fsKeys.SigningKey.CreateSelfSignedX509(tao.NewX509Name(&tao.X509Details{
+	// TODO(kwalsh) This may no longer be needed. Is there a significance to
+	// this cert?
+	name := tao.NewX509Name(&tao.X509Details{
 		Country:      proto.String(*country),
 		Organization: proto.String(*org),
 		CommonName:   proto.String(taoName.String()),
-	}))
+	})
+	fsKeys, err := tao.NewOnDiskTaoSealedKeys(tao.Signing|tao.Crypting, name, parentTao, *fileServerPath, tao.SealPolicyDefault)
 	if err != nil {
-		log.Fatalln("fileserver: couldn't create a self-signed cert for fileclient keys:", err)
+		log.Fatalln("fileserver: couldn't set up the Tao-sealed keys:", err)
 	}
 
 	// Contact keyNegoServer for the certificate.
@@ -167,7 +157,7 @@ func main() {
 	}
 	tao.ZeroBytes(symKeys)
 
-	progPolicy := fileproxy.NewProgramPolicy(policyCert, taoName.String(), fsKeys, symKeys, fsKeys.Cert.Raw)
+	progPolicy := fileproxy.NewProgramPolicy(policyCert, taoName.String(), fsKeys, symKeys, fsKeys.Cert["default"].Raw)
 
 	// Set up the file storage path if it doesn't exist.
 	if _, err := os.Stat(*fileServerFilePath); err != nil {

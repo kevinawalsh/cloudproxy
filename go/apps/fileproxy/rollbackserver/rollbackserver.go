@@ -33,17 +33,9 @@ func serve(serverAddr string, prin string, policyCert []byte, signingKey *tao.Ke
 	if err != nil {
 		return err
 	}
-	pool := x509.NewCertPool()
-	pool.AddCert(pc)
-	tlsc, err := tao.EncodeTLSCert(signingKey)
+	conf, err := signingKey.TLSServerConfig(pc)
 	if err != nil {
 		return err
-	}
-	conf := &tls.Config{
-		RootCAs:            pool,
-		Certificates:       []tls.Certificate{*tlsc},
-		InsecureSkipVerify: false,
-		ClientAuth:         tls.RequireAnyClientCert,
 	}
 	log.Println("Rollback server listening")
 	sock, err := tls.Listen("tcp", serverAddr, conf)
@@ -108,8 +100,8 @@ func main() {
 		log.Fatalln("rollbackserver: can't load domain:", err)
 	}
 	var policyCert []byte
-	if hostDomain.Keys.Cert != nil {
-		policyCert = hostDomain.Keys.Cert.Raw
+	if hostDomain.Keys.Cert["default"] != nil {
+		policyCert = hostDomain.Keys.Cert["default"].Raw
 	}
 	if policyCert == nil {
 		log.Fatalln("rollbackserver: can't retrieve policy cert")
@@ -130,17 +122,19 @@ func main() {
 	}
 
 	// Create or read the keys for rollbackserver.
-	rbKeys, err := tao.NewOnDiskTaoSealedKeys(tao.Signing|tao.Crypting, parentTao, *rollbackServerPath, tao.SealPolicyDefault)
+	// Set up a temporary cert for communication with keyNegoServer.
+	// TODO(kwalsh) This may no longer be needed. Is there a significance to
+	// this cert?
+	name := tao.NewX509Name(&tao.X509Details{
+		Country:      proto.String(*country),
+		Organization: proto.String(*org),
+		CommonName:   proto.String(taoName.String()),
+	})
+	rbKeys, err := tao.NewOnDiskTaoSealedKeys(tao.Signing|tao.Crypting, name, parentTao, *rollbackServerPath, tao.SealPolicyDefault)
 	if err != nil {
 		log.Fatalln("rollbackserver: couldn't set up the Tao-sealed keys:", err)
 	}
 
-	// Set up a temporary cert for communication with keyNegoServer.
-	rbKeys.Cert, err = rbKeys.SigningKey.CreateSelfSignedX509(tao.NewX509Name(&tao.X509Details{
-		Country:      proto.String(*country),
-		Organization: proto.String(*org),
-		CommonName:   proto.String(taoName.String()),
-	}))
 	if err != nil {
 		log.Fatalln("rollbackserver: couldn't create a self-signed cert for rollbackserver keys:", err)
 	}
@@ -151,7 +145,7 @@ func main() {
 	}
 
 	// The symmetric keys aren't used by the rollback server.
-	progPolicy := fileproxy.NewProgramPolicy(policyCert, taoName.String(), rbKeys, nil, rbKeys.Cert.Raw)
+	progPolicy := fileproxy.NewProgramPolicy(policyCert, taoName.String(), rbKeys, nil, rbKeys.Cert["default"].Raw)
 	m := fileproxy.NewRollbackMaster(taoName.String())
 
 	if err := serve(serverAddr, taoName.String(), policyCert, rbKeys, progPolicy, m); err != nil {

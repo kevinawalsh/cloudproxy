@@ -16,11 +16,7 @@ package tao
 
 import (
 	"crypto/tls"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
 	"fmt"
-	"net"
 	"time"
 
 	"github.com/golang/protobuf/proto"
@@ -35,153 +31,46 @@ const (
 	x509keySize  = 2048
 )
 
-// EncodeTLSCert combines a signing key and a certificate in a single tls
-// certificate suitable for a TLS config.
-func EncodeTLSCert(keys *Keys) (*tls.Certificate, error) {
-	if keys.Cert == nil {
-		return nil, fmt.Errorf("client: can't encode a nil certificate")
-	}
-	certPem := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: keys.Cert.Raw})
-	keyBytes, err := MarshalSignerDER(keys.SigningKey)
-	if err != nil {
-		return nil, err
-	}
-	keyPem := pem.EncodeToMemory(&pem.Block{Type: "ECDSA PRIVATE KEY", Bytes: keyBytes})
-
-	tlsCert, err := tls.X509KeyPair(certPem, keyPem)
-	if err != nil {
-		return nil, fmt.Errorf("can't parse cert: %s\n", err.Error())
-	}
-	return &tlsCert, nil
-}
-
-// generateX509 creates a fresh set of Tao-delegated keys and gets a certificate
-// from these keys.
-func generateX509() (*Keys, *tls.Certificate, error) {
-	keys, err := NewTemporaryTaoDelegatedKeys(Signing, Parent())
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// TODO(tmroeder): fix the name
-	cert, err := keys.SigningKey.CreateSelfSignedX509(&pkix.Name{
-		Organization: []string{"Google Tao Demo"}})
-	if err != nil {
-		return nil, nil, err
-	}
-	// TODO(kwalsh) keys should save cert on disk if keys are on disk
-	keys.Cert = cert
-	tc, err := EncodeTLSCert(keys)
-	return keys, tc, err
-}
-
-// ListenTLS creates a fresh certificate and listens for TLS connections using
-// it.
-func ListenTLS(network, addr string) (net.Listener, error) {
-	_, cert, err := generateX509()
-	if err != nil {
-		return nil, fmt.Errorf("server: can't create key and cert: %s\n", err.Error())
-	}
-	return tls.Listen(network, addr, &tls.Config{
-		RootCAs:            x509.NewCertPool(),
-		Certificates:       []tls.Certificate{*cert},
-		InsecureSkipVerify: true,
-		ClientAuth:         tls.RequireAnyClientCert,
-	})
-}
-
-// DialTLS creates a new X.509 certs from fresh keys and dials a given TLS
-// address.
-func DialTLS(network, addr string) (net.Conn, error) {
-	keys, _, err := generateX509()
-	if err != nil {
-		return nil, fmt.Errorf("client: can't create key and cert: %s\n", err.Error())
-	}
-
-	return DialTLSWithKeys(network, addr, keys)
-}
-
-// DialTLSWithKeys connects to a TLS server using an existing set of keys.
-func DialTLSWithKeys(network, addr string, keys *Keys) (net.Conn, error) {
-	tlsCert, err := EncodeTLSCert(keys)
-	conn, err := tls.Dial(network, addr, &tls.Config{
-		RootCAs:            x509.NewCertPool(),
-		Certificates:       []tls.Certificate{*tlsCert},
-		InsecureSkipVerify: true,
-	})
-	return conn, err
-}
-
-// DialWithNewX509 connects to a Tao TLS server, performs a TLS handshake, and
-// exchanges Attestation values with the server, checking that this is a Tao
-// server that is authorized to Execute. It uses a Tao Guard to perform this
-// check.
-func DialWithNewX509(network, addr string, guard Guard, v *Verifier) (net.Conn, error) {
-	keys, _, err := generateX509()
-	if err != nil {
-		return nil, fmt.Errorf("client: can't create key and cert: %s\n", err.Error())
-	}
-
-	return Dial(network, addr, guard, v, keys)
-}
-
-// Dial connects to a Tao TLS server, performs a TLS handshake, and verifies
-// the Attestation value of the server, checking that the server is authorized
-// to execute. If keys are provided (keys!=nil), then it sends an attestation
-// of its identity to the peer.
-func Dial(network, addr string, guard Guard, v *Verifier, keys *Keys) (net.Conn, error) {
-	tlsConfig := &tls.Config{
-		RootCAs:            x509.NewCertPool(),
-		InsecureSkipVerify: true,
-	}
-
+// Dial connects to a Tao TLS server, performs a TLS handshake. If guard is nil,
+// it verifies the Attestation value of the server, checking that the server is
+// authorized to execute. If keys are provided (keys!=nil), then it sends an
+// attestation of its identity to the peer. If config is nil, one will be
+// created.
+func Dial(network, addr string, guard Guard, v *Verifier, keys *Keys, conf *tls.Config) (*Conn, error) {
 	// Set up certificate for two-way authentication.
-	if keys != nil {
-		if keys.Cert == nil {
-			return nil, fmt.Errorf("client: can't dial with an empty client certificate\n")
-		}
-		tlsCert, err := EncodeTLSCert(keys)
+	if conf == nil {
+		var err error
+		conf, err = keys.TLSClientConfig(nil)
 		if err != nil {
 			return nil, err
 		}
-		tlsConfig.Certificates = []tls.Certificate{*tlsCert}
 	}
-
-	conn, err := tls.Dial(network, addr, tlsConfig)
+	conn, err := tls.Dial(network, addr, conf)
 	if err != nil {
 		return nil, err
 	}
-
-	ms := util.NewMessageStream(conn)
-
-	// Two-way Tao handshake: send client delegation.
+	var del *Attestation
 	if keys != nil {
-		if _, err = ms.WriteMessage(keys.Delegation); err != nil {
-			conn.Close()
-			return nil, err
-		}
+		del = keys.Delegation
 	}
-
-	// Tao handshake: read server delegation.
-	var a Attestation
-	if err := ms.ReadMessage(&a); err != nil {
-		conn.Close()
+	c := &Conn{
+		isServer: false,
+		ConnAuth: ConnAuth{
+			Authenticate:     keys != nil,
+			delegation:       del,
+			AuthenticatePeer: guard != nil,
+			guard:            guard,
+			verifier:         v,
+		},
+		Conn: conn,
+	}
+	c.FramedStream = util.FramedStream{util.MessageFraming{}, c}
+	// Handshake now, since it seems better to fail early on client.
+	err = c.Handshake()
+	if err != nil {
 		return nil, err
 	}
-
-	if err := AddEndorsements(guard, &a, v); err != nil {
-		conn.Close()
-		return nil, err
-	}
-
-	// Validate the peer certificate according to the guard.
-	peerCert := conn.ConnectionState().PeerCertificates[0]
-	if err := ValidatePeerAttestation(&a, peerCert, guard); err != nil {
-		conn.Close()
-		return nil, err
-	}
-
-	return conn, nil
+	return c, nil
 }
 
 // AddEndorsements reads the SerializedEndorsements in an attestation and adds

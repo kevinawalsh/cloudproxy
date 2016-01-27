@@ -4,7 +4,7 @@ set -o nounset
 set -o errexit
 
 # This script assumes that the code for running the demo server and demo client
-# has already been built in standalone mode using build_standalone.
+# has already been built in static (or "standalone") mode using build_static.sh.
 if [ "$#" -ge 1 ]; then
 	export TAO_DOMAIN="$1"
 elif [ "$TAO_DOMAIN" == "" ]; then
@@ -38,12 +38,12 @@ function build_docker() {
 	fi
 	cp "$APP_BIN" ${TEMP_DIR}/bin/${app_name}
 	mkdir ${TEMP_DIR}/policy_keys
-	cp $policy_cert ${TEMP_DIR}/policy_keys/cert
+	cp $policy_cert ${TEMP_DIR}/policy_keys/cert.der
 	cp $tao_config ${TEMP_DIR}/tao.config
 
 	tar -C ${TEMP_DIR} -czf "$APP_BIN".img.tgz $(ls ${TEMP_DIR})
 	rm -rf ${TEMP_DIR}
 }
 
-build_docker "$0" demo_server "$TAO_DOMAIN/policy_keys/cert" "$TAO_DOMAIN/tao.config"
-build_docker "$0" demo_client "$TAO_DOMAIN/policy_keys/cert" "$TAO_DOMAIN/tao.config"
+build_docker "$0" demo_server "$TAO_DOMAIN/policy_keys/cert.der" "$TAO_DOMAIN/tao.config"
+build_docker "$0" demo_client "$TAO_DOMAIN/policy_keys/cert.der" "$TAO_DOMAIN/tao.config"

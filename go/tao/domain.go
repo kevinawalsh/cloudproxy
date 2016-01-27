@@ -114,7 +114,7 @@ func CreateDomain(cfg DomainConfig, configPath string, password []byte) (*Domain
 	cfg.SetDefaults()
 
 	configDir := path.Dir(configPath)
-	err := os.MkdirAll(configDir, 0777)
+	err := util.MkdirAll(configDir, 0777)
 	if err != nil {
 		return nil, err
 	}
@@ -166,6 +166,11 @@ func CreateDomain(cfg DomainConfig, configPath string, password []byte) (*Domain
 	return d, nil
 }
 
+// TODO(kwalsh) I don't even know what a public cached domain is, so
+// I have no idea what the password is meant to protect. Previously,
+// the password was blank, but keys.go now disallows empty passwords.
+var PublicCachedDomainPassword = []byte("PublicCacheDomainPassword")
+
 // Create a public domain with a CachedGuard.
 // TODO(cjpatton) create a net.Conn here. defer Close() somehow. Add new
 // constructor from a net.Conn that doesn't save the domain to disk.
@@ -178,7 +183,7 @@ func (d *Domain) CreatePublicCachedDomain(network, addr string, ttl int64) (*Dom
 
 	// Load public key from domain.
 	keyPath := path.Join(configDir, d.Config.DomainInfo.GetPolicyKeysPath())
-	keys, err := NewOnDiskPBEKeys(Signing, make([]byte, 0), keyPath,
+	keys, err := NewOnDiskPBEKeys(Signing, PublicCachedDomainPassword, keyPath,
 		NewX509Name(d.Config.X509Info))
 	if err != nil {
 		return nil, err
@@ -209,19 +214,21 @@ func (d *Domain) CreatePublicCachedDomain(network, addr string, ttl int64) (*Dom
 	if err != nil {
 		return nil, err
 	}
-	inFile, err := os.Open(d.Keys.X509Path())
-	if err != nil {
-		return nil, err
-	}
-	defer inFile.Close()
-	outFile, err := os.Create(newDomain.Keys.X509Path())
-	if err != nil {
-		return nil, err
-	}
-	defer outFile.Close()
-	_, err = io.Copy(outFile, inFile)
-	if err != nil {
-		return nil, err
+	for name, _ := range d.Keys.X509Paths() {
+		inFile, err := os.Open(d.Keys.X509Path(name))
+		if err != nil {
+			return nil, err
+		}
+		defer inFile.Close()
+		outFile, err := os.Create(newDomain.Keys.X509Path(name))
+		if err != nil {
+			return nil, err
+		}
+		defer outFile.Close()
+		_, err = io.Copy(outFile, inFile)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Save domain.

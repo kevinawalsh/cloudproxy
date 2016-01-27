@@ -377,7 +377,7 @@ func (m *ResourceMaster) InitGuard(rf string) error {
 }
 
 // readResult reads an OperationResult and returns its value or an error.
-func readResult(ms *util.MessageStream) (bool, error) {
+func readResult(ms util.MessageStream) (bool, error) {
 	// Read the response wrapper message.
 	var arm Message
 	if err := ms.ReadMessage(&arm); err != nil {
@@ -395,7 +395,7 @@ func readResult(ms *util.MessageStream) (bool, error) {
 }
 
 // sendResult sends an OperationResult with the given value on the given stream.
-func sendResult(ms *util.MessageStream, result bool) error {
+func sendResult(ms util.MessageStream, result bool) error {
 	res := &OperationResult{Result: proto.Bool(result)}
 	ar := &Message{
 		Type: MessageType_OP_RES.Enum(),
@@ -416,7 +416,7 @@ func sendResult(ms *util.MessageStream, result bool) error {
 // principal on a single channel. In this toy implementation, it is assumed that
 // there are no other principals on the channel and that there are no other
 // simultaneous channels.
-func (m *ResourceMaster) AuthenticatePrincipal(ms *util.MessageStream, msg *Message, programPolicy *ProgramPolicy) ([]byte, error) {
+func (m *ResourceMaster) AuthenticatePrincipal(ms util.MessageStream, msg *Message, programPolicy *ProgramPolicy) ([]byte, error) {
 	// The certificate message is passed in by the caller as the first
 	// message.
 
@@ -489,7 +489,7 @@ func (m *ResourceMaster) AuthenticatePrincipal(ms *util.MessageStream, msg *Mess
 // Read causes the bytes of the file to be decrypted and read to the message
 // stream. By the time this function is called, the remote principal has already
 // been authenticated and the operation has already been authorized.
-func (m *ResourceMaster) Read(ms *util.MessageStream, fop *FileOperation, key []byte) error {
+func (m *ResourceMaster) Read(ms util.MessageStream, fop *FileOperation, key []byte) error {
 	ri := m.FindResource(*fop.Name)
 	if ri == nil {
 		return sendResult(ms, false)
@@ -502,7 +502,7 @@ func (m *ResourceMaster) Read(ms *util.MessageStream, fop *FileOperation, key []
 
 // Write causes the bytes of the file to be encrypted and integrity-protected
 // and written to disk as they are read from the MessageStream.
-func (m *ResourceMaster) Write(ms *util.MessageStream, fop *FileOperation, key []byte) error {
+func (m *ResourceMaster) Write(ms util.MessageStream, fop *FileOperation, key []byte) error {
 	// Note that a file has be created before it can be written to.
 	ri := m.FindResource(*fop.Name)
 	if ri == nil {
@@ -516,7 +516,7 @@ func (m *ResourceMaster) Write(ms *util.MessageStream, fop *FileOperation, key [
 
 // Create creates a file in the resource info in the ResourceMaster, but it
 // doesn't write any bits to disk about this file.
-func (m *ResourceMaster) Create(ms *util.MessageStream, fop *FileOperation) error {
+func (m *ResourceMaster) Create(ms util.MessageStream, fop *FileOperation) error {
 	ri := m.FindResource(*fop.Name)
 	if ri != nil {
 		// Can't create a file that already exists.
@@ -567,7 +567,7 @@ func (m *ResourceMaster) certToAuthenticatedName(cert []byte) (string, error) {
 
 // RunMessageLoop handles messages from a client on a given message stream until
 // it gets an error trying to read a message.
-func (m *ResourceMaster) RunMessageLoop(ms *util.MessageStream, programPolicy *ProgramPolicy) error {
+func (m *ResourceMaster) RunMessageLoop(ms util.MessageStream, programPolicy *ProgramPolicy) error {
 	for {
 		var msg Message
 		if err := ms.ReadMessage(&msg); err != nil {
@@ -650,7 +650,7 @@ func NewResourceMaster(filepath string) *ResourceMaster {
 // ResourceMaster.
 
 // recvResult waits for a OperationResult on a MessageStream
-func recvResult(ms *util.MessageStream) (bool, error) {
+func recvResult(ms util.MessageStream) (bool, error) {
 	var m Message
 	if err := ms.ReadMessage(&m); err != nil {
 		return false, err
@@ -678,7 +678,7 @@ func wrapResult(ok bool, err error) error {
 // sendOperation is a helper method that sets up the data structures needed for
 // a FileOperation message like CREATE, WRITE, or READ, and sends this message
 // on the MessageStream.
-func sendOperation(ms *util.MessageStream, mt MessageType, cert []byte, name string) error {
+func sendOperation(ms util.MessageStream, mt MessageType, cert []byte, name string) error {
 	fop := &FileOperation{
 		Subject: cert,
 		Name:    proto.String(name),
@@ -701,7 +701,7 @@ func sendOperation(ms *util.MessageStream, mt MessageType, cert []byte, name str
 }
 
 // CreateFile creates a file with a given creator and name.
-func CreateFile(ms *util.MessageStream, ownerCert []byte, name string) error {
+func CreateFile(ms util.MessageStream, ownerCert []byte, name string) error {
 	if err := sendOperation(ms, MessageType_CREATE, ownerCert, name); err != nil {
 		return err
 	}
@@ -711,7 +711,7 @@ func CreateFile(ms *util.MessageStream, ownerCert []byte, name string) error {
 
 // WriteFile writes a local file, using SendFile without any keys to read the
 // file from disk and send it on the MessageStream.
-func WriteFile(ms *util.MessageStream, userCert []byte, dir, name string) error {
+func WriteFile(ms util.MessageStream, userCert []byte, dir, name string) error {
 	if err := sendOperation(ms, MessageType_WRITE, userCert, name); err != nil {
 		return err
 	}
@@ -726,7 +726,7 @@ func WriteFile(ms *util.MessageStream, userCert []byte, dir, name string) error 
 // ReadFile reads a file from the server and writes it to a local file, using
 // GetFile without any keys to read the file from the network and write it to
 // the disk.
-func ReadFile(ms *util.MessageStream, userCert []byte, dir, name, output string) error {
+func ReadFile(ms util.MessageStream, userCert []byte, dir, name, output string) error {
 	if err := sendOperation(ms, MessageType_READ, userCert, name); err != nil {
 		return err
 	}
@@ -741,7 +741,7 @@ func ReadFile(ms *util.MessageStream, userCert []byte, dir, name, output string)
 // AuthenticatePrincipal is a client method used to send a request to a
 // ResourceMaster to authenticate a principal with a given certificate and a
 // given set of keys.
-func AuthenticatePrincipal(ms *util.MessageStream, key *tao.Keys, derCert []byte) error {
+func AuthenticatePrincipal(ms util.MessageStream, key *tao.Keys, derCert []byte) error {
 	// Send the authentication request, which supposes that a server is
 	// waiting to receive this request.
 	c := &Message{

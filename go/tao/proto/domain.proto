@@ -28,9 +28,10 @@ message X509Details {
   optional string common_name = 1;
   optional string country = 2;
   optional string state = 3;
-  optional string organization = 4;
-  optional string organizational_unit = 5;
-  optional int32 serial_number = 6;
+  optional string city = 4;
+  optional string organization = 5;
+  optional string organizational_unit = 6;
+  optional int32 serial_number = 7;
 }
 
 message ACLGuardDetails {

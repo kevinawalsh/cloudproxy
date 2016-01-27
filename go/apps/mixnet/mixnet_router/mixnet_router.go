@@ -15,7 +15,6 @@
 package main
 
 import (
-	"crypto/x509/pkix"
 	"flag"
 	"io"
 	"os"
@@ -60,12 +59,6 @@ var configPath = flag.String("config", "tao.config", "Path to domain configurati
 var batchSize = flag.Int("batch", 1, "Number of senders in a batch.")
 var timeoutDuration = flag.String("timeout", "10s", "Timeout on TCP connections, e.g. \"10s\".")
 
-// x509 identity of the mixnet router.
-var x509Identity pkix.Name = pkix.Name{
-	Organization:       []string{"Google Inc."},
-	OrganizationalUnit: []string{"Cloud Security"},
-}
-
 func main() {
 	flag.Parse()
 	timeout, err := time.ParseDuration(*timeoutDuration)
@@ -74,7 +67,7 @@ func main() {
 	}
 
 	hp, err := mixnet.NewRouterContext(*configPath, *routerNetwork, *routerAddr, *batchSize,
-		timeout, &x509Identity, tao.Parent())
+		timeout, tao.Parent())
 	if err != nil {
 		glog.Fatalf("failed to configure router: %s", err)
 	}

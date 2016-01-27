@@ -16,9 +16,6 @@ package tao
 import (
 	"bytes"
 	"crypto/rand"
-	"crypto/tls"
-	"crypto/x509"
-	"crypto/x509/pkix"
 	"net"
 	"os"
 	"testing"
@@ -26,37 +23,18 @@ import (
 	"github.com/jlmucb/cloudproxy/go/util"
 )
 
-func newNetKeys(t *testing.T, ta Tao, org string) (*Keys, *tls.Config) {
+func newNetKeys(t *testing.T, ta Tao) *Keys {
 	var keys *Keys
 	var err error
 	if ta != nil {
-		keys, err = NewTemporaryTaoDelegatedKeys(Signing, ta)
+		keys, err = NewTemporaryTaoDelegatedKeys(Signing, nil, ta)
 	} else {
 		keys, err = NewTemporaryKeys(Signing)
 	}
 	if err != nil {
 		t.Fatalf("couldn't create new temporary delegated keys: %s", err)
 	}
-
-	keys.Cert, err = keys.SigningKey.CreateSelfSignedX509(&pkix.Name{
-		Organization: []string{org}})
-	if err != nil {
-		t.Fatalf("couldn't create a self-signed certificate from the keys: %s", err)
-	}
-
-	tlsc, err := EncodeTLSCert(keys)
-	if err != nil {
-		t.Fatalf("couldn't encode TLS cert from the keys")
-	}
-
-	conf := &tls.Config{
-		RootCAs:            x509.NewCertPool(),
-		Certificates:       []tls.Certificate{*tlsc},
-		InsecureSkipVerify: true,
-		ClientAuth:         tls.RequireAnyClientCert,
-	}
-
-	return keys, conf
+	return keys
 }
 
 func setUpListener(t *testing.T, anonymous bool) (net.Listener, *Keys, Tao) {
@@ -70,14 +48,14 @@ func setUpListener(t *testing.T, anonymous bool) (net.Listener, *Keys, Tao) {
 		t.Fatalf("couldn't down-cast the Tao to a SoftTao")
 	}
 
-	keys, conf := newNetKeys(t, st, "Net Test")
+	keys := newNetKeys(t, st)
 
 	// For a simple Listen test, use the LiberalGuard.
 	var l net.Listener
 	if !anonymous {
-		l, err = Listen("tcp", "127.0.0.1:0", conf, LiberalGuard, soft.GetVerifier(), keys.Delegation)
+		l, err = Listen("tcp", "127.0.0.1:0", keys, LiberalGuard, soft.GetVerifier(), nil)
 	} else {
-		l, err = ListenAnonymous("tcp", "127.0.0.1:0", conf, LiberalGuard, soft.GetVerifier(), keys.Delegation)
+		l, err = Listen("tcp", "127.0.0.1:0", keys, nil, nil, nil)
 	}
 	if err != nil {
 		t.Fatalf("couldn't set up a Tao listener: %s", err)
@@ -143,9 +121,9 @@ func TestTaoHandshake(t *testing.T) {
 	// message.
 	verifier := st.(*SoftTao).GetVerifier()
 
-	ck, _ := newNetKeys(t, st, "Net Test")
+	ck := newNetKeys(t, st)
 
-	c, err := Dial("tcp", addr.String(), LiberalGuard, verifier, ck)
+	c, err := Dial("tcp", addr.String(), LiberalGuard, verifier, ck, nil)
 	if err != nil {
 		t.Fatalf("couldn't dial the server using Tao networking: %s", err)
 	}
@@ -181,7 +159,7 @@ func TestAnonymousTaoHandshake(t *testing.T) {
 	// message.
 	verifier := st.(*SoftTao).GetVerifier()
 
-	c, err := Dial("tcp", addr.String(), LiberalGuard, verifier, nil)
+	c, err := Dial("tcp", addr.String(), LiberalGuard, verifier, nil, nil)
 	if err != nil {
 		t.Fatalf("couldn't dial the server using Tao networking: %s", err)
 	}
@@ -234,7 +212,7 @@ func TestCARequestAttestation(t *testing.T) {
 		t.Fatalf("couldn't create a new SoftTao: %s", err)
 	}
 
-	keys, _ := newNetKeys(t, st, "Net Test")
+	keys := newNetKeys(t, st)
 
 	_, err = RequestAttestation("tcp", caAddr.String(), keys, pk.VerifyingKey)
 	if err != nil {
@@ -266,7 +244,7 @@ func TestCARequestTruncatedAttestation(t *testing.T) {
 		t.Fatalf("couldn't create a new SoftTao: %s", err)
 	}
 
-	keys, _ := newNetKeys(t, st, "Net Test")
+	keys := newNetKeys(t, st)
 
 	_, err = RequestTruncatedAttestation("tcp", caAddr.String(), keys, pk.VerifyingKey)
 	if err != nil {

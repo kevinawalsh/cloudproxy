@@ -91,10 +91,11 @@ func EstablishCert(network, addr string, k *tao.Keys, v *tao.Verifier) error {
 		return errors.New("speaksfor message doesn't have Delegate")
 	}
 	newCert := auth.Bytes(kprin.(auth.Bytes))
-	k.Cert, err = x509.ParseCertificate(newCert)
+	cert, err := x509.ParseCertificate(newCert)
 	if err != nil {
 		return err
 	}
+	k.Cert["default"] = cert
 
 	return nil
 }
@@ -109,7 +110,7 @@ const minKeySize = hmacKeySize + aesKeySize
 // MessageStream. If there are sufficient bytes in the keys (at least
 // hmacKeySize+aesKeySize), then it will attempt to check the integrity of the
 // file with HMAC-SHA256 and decrypt it with AES-CTR-128.
-func SendFile(ms *util.MessageStream, dir string, filename string, keys []byte) error {
+func SendFile(ms util.MessageStream, dir string, filename string, keys []byte) error {
 	fullpath := path.Join(dir, filename)
 	fileInfo, err := os.Stat(fullpath)
 	if err != nil {
@@ -253,7 +254,7 @@ func SendFile(ms *util.MessageStream, dir string, filename string, keys []byte) 
 
 // GetFile receives bytes from a sender and optionally encrypts them and adds
 // integrity protection, and writes them to disk.
-func GetFile(ms *util.MessageStream, dir string, filename string, keys []byte) error {
+func GetFile(ms util.MessageStream, dir string, filename string, keys []byte) error {
 	fullpath := path.Join(dir, filename)
 	file, err := os.Create(fullpath)
 	if err != nil {
