@@ -21,7 +21,7 @@ import (
 	"io"
 )
 
-// Buffer holds partially encoded or decode auth elemnts.
+// Buffer holds partially encoded or decode auth elements.
 // Note: We could do capacity-doubling, etc., but we favor simplicity for now.
 type Buffer struct {
 	buf []byte
