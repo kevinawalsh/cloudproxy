@@ -30,16 +30,18 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/google/go-tpm/tpm"
+	"github.com/jlmucb/cloudproxy/go/apps"
 	"github.com/jlmucb/cloudproxy/go/tao"
 	"github.com/jlmucb/cloudproxy/go/tao/auth"
+	"github.com/jlmucb/cloudproxy/go/util"
 	"github.com/jlmucb/cloudproxy/go/util/options"
+	"github.com/jlmucb/cloudproxy/go/util/verbose"
 	"golang.org/x/crypto/ssh/terminal"
 )
 
 var opts = []options.Option{
 	// Flags for all/most commands
 	{"tao_domain", "", "<dir>", "Tao domain configuration directory", "all"},
-	{"quiet", false, "", "Be more quiet", "all"},
 	{"pass", "", "<password>", "Password for policy private key (Testing only!)", "all"},
 
 	// Flags for miscellaneous commands
@@ -59,6 +61,7 @@ var opts = []options.Option{
 	// depend on the Guard given in the domain/tao.
 	{"canexecute", "", "<prog>", "Path of a program to be authorized to execute", "policy"},
 	{"retractcanexecute", "", "<prog>", "Path of a program to retract authorization to execute", "policy"},
+	{"show", false, "", "Show all policy rules", "policy"},
 	{"add", "", "<rule>", "A policy rule to be added", "policy"},
 	{"retract", "", "<rule>", "A policy rule to be retracted", "policy"},
 	{"query", "", "<rule>", "A policy query to be checked", "policy"},
@@ -86,8 +89,6 @@ var opts = []options.Option{
 func init() {
 	options.Add(opts...)
 }
-
-var noise = ioutil.Discard
 
 func help() {
 	w := new(tabwriter.Writer)
@@ -132,10 +133,6 @@ func main() {
 		flag.CommandLine.Parse(flag.Args()[1:])
 	}
 
-	if !*options.Bool["quiet"] {
-		noise = os.Stdout
-	}
-
 	switch cmd {
 	case "help":
 		help()
@@ -161,30 +158,19 @@ func template() *tao.DomainTemplate {
 	if savedTemplate == nil {
 		configTemplate := *options.String["config_template"]
 		if configTemplate == "" {
-			options.Usage("Must supply -config_template")
+			configTemplate = path.Join(apps.TaoDomainPath(), "domain_template.pb")
 		}
 		savedTemplate = new(tao.DomainTemplate)
 		pbtext, err := ioutil.ReadFile(configTemplate)
-		options.FailIf(err, "Can't read config template")
+		options.FailIf(err, "Can't read config template. Try -config_template instead?")
 		err = proto.UnmarshalText(string(pbtext), savedTemplate)
 		options.FailIf(err, "Can't parse config template: %s", configTemplate)
 	}
 	return savedTemplate
 }
 
-func domainPath() string {
-	if path := *options.String["tao_domain"]; path != "" {
-		return path
-	}
-	if path := os.Getenv("TAO_DOMAIN"); path != "" {
-		return path
-	}
-	options.Usage("Must supply -tao_domain or set $TAO_DOMAIN")
-	return ""
-}
-
 func configPath() string {
-	return path.Join(domainPath(), "tao.config")
+	return path.Join(apps.TaoDomainPath(), "tao.config")
 }
 
 func managePolicy() {
@@ -207,13 +193,22 @@ func managePolicy() {
 		options.FailIf(err, "Can't save domain")
 	}
 
+	// Clear all the policy stored by the Guard.
+	if *options.Bool["show"] {
+		n := domain.Guard.RuleCount()
+		fmt.Printf("Domain guard enforces %d rules:\n", n)
+		for i := 0; i < n; i++ {
+			fmt.Printf("rule %d: %s\n", i, domain.Guard.RuleDebugString(i))
+		}
+	}
+
 	// Add permissions
 	if canExecute := *options.String["canexecute"]; canExecute != "" {
 		host := template().GetHostName()
 		addExecute(canExecute, host, domain)
 	}
 	if add := *options.String["add"]; add != "" {
-		fmt.Fprintf(noise, "Adding policy rule: %s\n", add)
+		verbose.Printf("Adding policy rule: %s\n", add)
 		err := domain.Guard.AddRule(add)
 		options.FailIf(err, "Can't add rule to domain")
 		err = domain.Save()
@@ -248,7 +243,7 @@ func managePolicy() {
 
 	// Retract permissions
 	if retract := *options.String["retract"]; retract != "" {
-		fmt.Fprintf(noise, "Retracting policy rule: %s\n", retract)
+		verbose.Printf("Retracting policy rule: %s\n", retract)
 		err := domain.Guard.RetractRule(retract)
 		options.FailIf(err, "Can't retract rule from domain")
 		err = domain.Save()
@@ -261,16 +256,12 @@ func managePolicy() {
 }
 
 func hash(p string) ([]byte, error) {
-	// If the path is not absolute, then try $GOPATH/bin/path if it exists.
-	realPath := p
-	if !path.IsAbs(p) {
-		// TODO(kwalsh) handle case where GOPATH has multiple paths
-		gopath := os.Getenv("GOPATH")
-		if gopath != "" {
-			realPath = path.Join(path.Join(gopath, "bin"), realPath)
-		}
+	dirs := util.LiberalSearchPath()
+	binary := util.FindExecutable(p, dirs)
+	if binary == "" {
+		return nil, fmt.Errorf("Can't find `%s` on path '%s'", p, strings.Join(dirs, ":"))
 	}
-	file, err := os.Open(realPath)
+	file, err := os.Open(binary)
 	if err != nil {
 		return nil, err
 	}
@@ -295,6 +286,7 @@ func makeProgramSubPrin(prog string) (auth.SubPrin, error) {
 	id := uint(0)
 	h, err := hash(prog)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: Can't calculate subprin hash\n", err)
 		return auth.SubPrin{}, err
 	}
 	return tao.FormatProcessSubprin(id, h), nil
@@ -439,7 +431,7 @@ func addExecute(path, host string, domain *tao.Domain) {
 	subprin, err := makeProgramSubPrin(path)
 	if err == nil {
 		prog := prin.MakeSubprincipal(subprin)
-		fmt.Fprintf(noise, "Authorizing program to execute:\n"+
+		verbose.Printf("Authorizing program to execute:\n"+
 			"  path: %s\n"+
 			"  host: %s\n"+
 			"  name: %s\n", path, prin, subprin)
@@ -455,7 +447,7 @@ func retractExecute(path, host string, domain *tao.Domain) {
 	subprin, err := makeProgramSubPrin(path)
 	if err == nil {
 		prog := prin.MakeSubprincipal(subprin)
-		fmt.Fprintf(noise, "Retracting program authorization to execute:\n"+
+		verbose.Printf("Retracting program authorization to execute:\n"+
 			"  path: %s\n"+
 			"  host: %s\n"+
 			"  name: %s\n", path, prin, subprin)
@@ -719,7 +711,7 @@ func outputPrincipal() {
 	}
 	if lhpath := *options.String["soft"]; lhpath != "" {
 		if !path.IsAbs(lhpath) {
-			lhpath = path.Join(domainPath(), lhpath)
+			lhpath = path.Join(apps.TaoDomainPath(), lhpath)
 		}
 		k, err := tao.NewOnDiskPBEKeys(tao.Signing, nil, lhpath, nil)
 		options.FailIf(err, "Can't create soft tao keys")
