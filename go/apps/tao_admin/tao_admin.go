@@ -674,7 +674,7 @@ func createUserKeys() {
 
 	subjectName := tao.NewX509Name(&xd)
 	userKeyPath := *options.String["user_key_path"]
-	_, err = tao.NewSignedOnDiskPBEKeys(tao.Signing, upwd, userKeyPath, subjectName, int(xd.GetSerialNumber()), policyKey)
+	_, err = tao.NewSignedOnDiskPBEKeys(tao.Signing, upwd, userKeyPath, subjectName, int64(xd.GetSerialNumber()), policyKey)
 	options.FailIf(err, "Can't create user signing key")
 }
 

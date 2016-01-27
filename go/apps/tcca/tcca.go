@@ -15,7 +15,6 @@
 package main
 
 import (
-	"crypto/x509/pkix"
 	"flag"
 	"fmt"
 	"net"
@@ -34,21 +33,6 @@ func main() {
 	domain, err := tao.LoadDomain(*configPath, []byte(*domainPass))
 	if err != nil {
 		glog.Exitf("Couldn't load the config path %s: %s\n", *configPath, err)
-		return
-	}
-
-	// Set up temporary keys for the connection, since the only thing that
-	// matters to the remote client is that they receive a correctly-signed new
-	// attestation from the policy key.
-	keys, err := tao.NewTemporaryKeys(tao.Signing)
-	if err != nil {
-		glog.Exit("Couldn't set up temporary keys for the connection:", err)
-		return
-	}
-	keys.Cert, err = keys.SigningKey.CreateSelfSignedX509(&pkix.Name{
-		Organization: []string{"Google Tao Demo"}})
-	if err != nil {
-		glog.Exit("Couldn't set up a self-signed cert:", err)
 		return
 	}
 

@@ -21,7 +21,6 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"crypto/tls"
-	"crypto/x509"
 	"flag"
 	"io/ioutil"
 	"log"
@@ -59,8 +58,8 @@ func main() {
 		log.Fatalln("fileclient: Can't load domain")
 	}
 	var derPolicyCert []byte
-	if hostDomain.Keys.Cert != nil {
-		derPolicyCert = hostDomain.Keys.Cert.Raw
+	if hostDomain.Keys.Cert["default"] != nil {
+		derPolicyCert = hostDomain.Keys.Cert["default"].Raw
 	}
 	if derPolicyCert == nil {
 		log.Fatalln("fileclient: Can't retrieve policy cert")
@@ -81,17 +80,19 @@ func main() {
 	}
 
 	// Create or read the keys for fileclient.
-	fcKeys, err := tao.NewOnDiskTaoSealedKeys(tao.Signing|tao.Crypting, parentTao, *fileClientPath, tao.SealPolicyDefault)
+	// Set up a temporary cert for communication with keyNegoServer.
+	// TODO(kwalsh) This may no longer be needed. Is there a significance to
+	// this cert?
+	name := tao.NewX509Name(&tao.X509Details{
+		Country:      proto.String(*country),
+		Organization: proto.String(*org),
+		CommonName:   proto.String(taoName.String()),
+	})
+	fcKeys, err := tao.NewOnDiskTaoSealedKeys(tao.Signing|tao.Crypting, name, parentTao, *fileClientPath, tao.SealPolicyDefault)
 	if err != nil {
 		log.Fatalln("fileclient: couldn't set up the Tao-sealed keys:", err)
 	}
 
-	// Set up a temporary cert for communication with keyNegoServer.
-	fcKeys.Cert, err = fcKeys.SigningKey.CreateSelfSignedX509(tao.NewX509Name(&tao.X509Details{
-		Country:      proto.String(*country),
-		Organization: proto.String(*org),
-		CommonName:   proto.String(taoName.String()),
-	}))
 	if err != nil {
 		log.Fatalln("fileclient: couldn't create a self-signed cert for fileclient keys:", err)
 	}
@@ -102,18 +103,11 @@ func main() {
 	}
 
 	// Get the policy cert and set up TLS.
-	pool := x509.NewCertPool()
-	pool.AddCert(hostDomain.Keys.Cert)
-
-	tlsc, err := tao.EncodeTLSCert(fcKeys)
+	conf, err := fcKeys.TLSClientConfig(hostDomain.Keys.Cert["default"])
 	if err != nil {
 		log.Fatalln("fileclient, encode error: ", err)
 	}
-	conn, err := tls.Dial("tcp", serverAddr, &tls.Config{
-		RootCAs:            pool,
-		Certificates:       []tls.Certificate{*tlsc},
-		InsecureSkipVerify: false,
-	})
+	conn, err := tls.Dial("tcp", serverAddr, conf)
 	if err != nil {
 		log.Fatalln("fileclient: can't establish channel: ", err)
 	}
@@ -151,7 +145,7 @@ And it doesn't have very much content.
 	if err != nil {
 		log.Fatalf("Couldn't read the keys from %s: %s\n", *fileClientKeyPath, err)
 	}
-	userCert := userKeys.Cert.Raw
+	userCert := userKeys.Cert["default"].Raw
 
 	// Authenticate a key to use for requests to the server.
 	if err = fileproxy.AuthenticatePrincipal(ms, userKeys, userCert); err != nil {
@@ -179,11 +173,7 @@ And it doesn't have very much content.
 	// Set up a TLS connection to the rollback server, just like the one to
 	// the file server.
 	rollbackServerAddr := net.JoinHostPort(*rollbackServerHost, *rollbackServerPort)
-	rbconn, err := tls.Dial("tcp", rollbackServerAddr, &tls.Config{
-		RootCAs:            pool,
-		Certificates:       []tls.Certificate{*tlsc},
-		InsecureSkipVerify: false,
-	})
+	rbconn, err := tls.Dial("tcp", rollbackServerAddr, conf)
 	if err != nil {
 		log.Fatalf("fileclient: can't establish rollback channel: %s", err)
 	}

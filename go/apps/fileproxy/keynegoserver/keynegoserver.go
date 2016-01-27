@@ -14,8 +14,6 @@ package main
 
 import (
 	"crypto/tls"
-	"crypto/x509"
-	"crypto/x509/pkix"
 	"errors"
 	"flag"
 	"fmt"
@@ -44,8 +42,13 @@ func handleRequest(conn net.Conn, policyKey *tao.Keys, guard tao.Guard) error {
 	}
 
 	peerCert := conn.(*tls.Conn).ConnectionState().PeerCertificates[0]
-	if err := tao.ValidatePeerAttestation(&a, peerCert, guard); err != nil {
+	p, err := tao.ValidatePeerAttestation(&a, peerCert)
+	if err != nil {
 		return err
+	}
+	// TODO(kwalsh) most of this duplicates the work of tao.Conn
+	if !guard.IsAuthorized(p, "Execute", nil) {
+		return fmt.Errorf("peer is not authorized to execute, hence not authorized to connect either")
 	}
 
 	// Sign cert and put it in attestation statement
@@ -90,7 +93,9 @@ func handleRequest(conn net.Conn, policyKey *tao.Keys, guard tao.Guard) error {
 	if err != nil {
 		return errors.New("can't get principal from kprin")
 	}
-	clientCert, err := policyKey.SigningKey.CreateSignedX509(policyKey.Cert, int(SerialNumber), verifier, subjectname)
+	template := policyKey.SigningKey.X509Template(subjectname)
+	template.IsCA = false
+	clientCert, err := policyKey.CreateSignedX509(verifier, template, "default")
 	if err != nil {
 		return fmt.Errorf("keynegoserver: can't create client certificate: %s\n", err)
 	}
@@ -160,26 +165,15 @@ func main() {
 	if err != nil {
 		log.Fatalln("keynegoserver: Couldn't set up temporary keys for the connection:", err)
 	}
-	keys.Cert, err = keys.SigningKey.CreateSelfSignedX509(&pkix.Name{
-		Organization: []string{"Google Tao Demo"}})
-	if err != nil {
-		log.Fatalln("keynegoserver: Couldn't set up a self-signed cert:", err)
-	}
 	SerialNumber = int64(time.Now().UnixNano()) / (1000000)
 	policyKey, err := tao.NewOnDiskPBEKeys(tao.Signing, []byte(*domainPass), "policy_keys", nil)
 	if err != nil {
 		log.Fatalln("keynegoserver: Couldn't get policy key:", err)
 	}
 
-	tlsc, err := tao.EncodeTLSCert(keys)
+	conf, err := keys.TLSServerConfig(nil)
 	if err != nil {
 		log.Fatalln("keynegoserver: Couldn't encode a TLS cert:", err)
-	}
-	conf := &tls.Config{
-		RootCAs:            x509.NewCertPool(),
-		Certificates:       []tls.Certificate{*tlsc},
-		InsecureSkipVerify: true,
-		ClientAuth:         tls.RequireAnyClientCert,
 	}
 	sock, err := tls.Listen(*network, *addr, conf)
 	if err != nil {

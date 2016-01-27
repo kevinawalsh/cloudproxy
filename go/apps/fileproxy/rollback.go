@@ -108,7 +108,7 @@ func decodeCounter(b []byte) (uint64, error) {
 // SetCounter sets the monotonic counter for a given program to a higher value.
 // It returns an error if the program doesn't exist or if the new value of the
 // counter is less than the current value of the counter.
-func (r *RollbackMaster) SetCounter(ms *util.MessageStream, name string, counter uint64) error {
+func (r *RollbackMaster) SetCounter(ms util.MessageStream, name string, counter uint64) error {
 	var emptyData []byte
 	rr := &RollbackResponse{
 		Type: RollbackMessageType_ERROR.Enum(),
@@ -142,7 +142,7 @@ func (r *RollbackMaster) SetCounter(ms *util.MessageStream, name string, counter
 
 // SetHash implements RollbackMessageType_SET_HASH by setting the value of the
 // hash for a given item to a given hash value.
-func (r *RollbackMaster) SetHash(ms *util.MessageStream, name string, item string, h []byte) error {
+func (r *RollbackMaster) SetHash(ms util.MessageStream, name string, item string, h []byte) error {
 	var emptyData []byte
 	rr := &RollbackResponse{
 		Type: RollbackMessageType_ERROR.Enum(),
@@ -187,7 +187,7 @@ func (r *RollbackMaster) SetHash(ms *util.MessageStream, name string, item strin
 
 // GetCounter implements RollbackMessageType_GET_COUNTER and returns the current
 // value of a counter to the requestor.
-func (r *RollbackMaster) GetCounter(ms *util.MessageStream, name string) error {
+func (r *RollbackMaster) GetCounter(ms util.MessageStream, name string) error {
 	var emptyData []byte
 	rr := &RollbackResponse{
 		Type: RollbackMessageType_ERROR.Enum(),
@@ -210,7 +210,7 @@ func (r *RollbackMaster) GetCounter(ms *util.MessageStream, name string) error {
 
 // GetHashedVerifier gets a version of the hash for a given item along with the
 // current monotonic counter.
-func (r *RollbackMaster) GetHashedVerifier(ms *util.MessageStream, name string, item string) error {
+func (r *RollbackMaster) GetHashedVerifier(ms util.MessageStream, name string, item string) error {
 	var emptyData []byte
 	rr := &RollbackResponse{
 		Type: RollbackMessageType_ERROR.Enum(),
@@ -252,7 +252,7 @@ func (r *RollbackMaster) GetHashedVerifier(ms *util.MessageStream, name string, 
 
 // checkResponse waits for a RollbackResponse and checks to make sure it's not
 // an ERROR response from the server.
-func checkResponse(ms *util.MessageStream) error {
+func checkResponse(ms util.MessageStream) error {
 	var rr RollbackResponse
 	if err := ms.ReadMessage(&rr); err != nil {
 		return err
@@ -264,7 +264,7 @@ func checkResponse(ms *util.MessageStream) error {
 }
 
 // SetCounter sets the remote counter for this program.
-func SetCounter(ms *util.MessageStream, counter uint64) error {
+func SetCounter(ms util.MessageStream, counter uint64) error {
 	rm := &RollbackMessage{
 		Type: RollbackMessageType_SET_COUNTER.Enum(),
 		Data: EncodeCounter(counter),
@@ -279,7 +279,7 @@ func SetCounter(ms *util.MessageStream, counter uint64) error {
 }
 
 // SetHash sets the value of a hash for a given item for this program.
-func SetHash(ms *util.MessageStream, item string, hash []byte) error {
+func SetHash(ms util.MessageStream, item string, hash []byte) error {
 	rh := &RollbackHash{
 		Item: proto.String(item),
 		Hash: hash,
@@ -301,7 +301,7 @@ func SetHash(ms *util.MessageStream, item string, hash []byte) error {
 
 // GetCounter gets the current value of the monotonic counter for a given
 // program name.
-func GetCounter(ms *util.MessageStream) (uint64, error) {
+func GetCounter(ms util.MessageStream) (uint64, error) {
 	// The name of the program is managed by the rollback server, not the
 	// client, so it doesn't need to be passed in the message.
 	rm := &RollbackMessage{
@@ -327,7 +327,7 @@ func GetCounter(ms *util.MessageStream) (uint64, error) {
 
 // GetHashedVerifier gets the hash of the counter and the item hash for a given
 // item.
-func GetHashedVerifier(ms *util.MessageStream, item string) ([]byte, error) {
+func GetHashedVerifier(ms util.MessageStream, item string) ([]byte, error) {
 	rm := &RollbackMessage{
 		Type: RollbackMessageType_GET_HASHED_VERIFIER.Enum(),
 		Data: []byte(item),
@@ -351,7 +351,7 @@ func GetHashedVerifier(ms *util.MessageStream, item string) ([]byte, error) {
 
 // RunMessageLoop handles incoming messages for the RollbackMaster and passes
 // them to the appropriate functions.
-func (r *RollbackMaster) RunMessageLoop(ms *util.MessageStream, programPolicy *ProgramPolicy, name string) error {
+func (r *RollbackMaster) RunMessageLoop(ms util.MessageStream, programPolicy *ProgramPolicy, name string) error {
 	for {
 		var msg RollbackMessage
 		if err := ms.ReadMessage(&msg); err != nil {

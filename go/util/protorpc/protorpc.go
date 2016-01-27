@@ -40,13 +40,13 @@ import (
 
 // clientCodec is a net/rpc client codec for protobuf messages
 type clientCodec struct {
-	m       *util.MessageStream
+	m       util.MessageStream
 	sending sync.Mutex
 }
 
 // NewClientCodec returns a new rpc.ClientCodec using protobuf messages on conn.
 func NewClientCodec(conn io.ReadWriteCloser) rpc.ClientCodec {
-	m, ok := conn.(*util.MessageStream)
+	m, ok := conn.(util.MessageStream)
 	if !ok {
 		// The given conn lacks framing, so add some.
 		m = util.NewMessageStream(conn)
@@ -129,13 +129,13 @@ func (c *clientCodec) Close() error {
 
 // serverCodec is a net/rpc server codec for protobuf messages
 type serverCodec struct {
-	m       *util.MessageStream
+	m       util.MessageStream
 	sending sync.Mutex
 }
 
 // NewServerCodec returns a new rpc.ServerCodec using protobuf messages on conn.
 func NewServerCodec(conn io.ReadWriteCloser) rpc.ServerCodec {
-	m, ok := conn.(*util.MessageStream)
+	m, ok := conn.(util.MessageStream)
 	if !ok {
 		// The given conn lacks framing, so add some.
 		m = util.NewMessageStream(conn)

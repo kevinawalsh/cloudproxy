@@ -66,7 +66,7 @@ func (p *ProxyContext) Close() {
 
 // DialRouter connects anonymously to a remote Tao-delegated mixnet router.
 func (p *ProxyContext) DialRouter(network, addr string) (*Conn, error) {
-	c, err := tao.Dial(network, addr, p.domain.Guard, p.domain.Keys.VerifyingKey, nil)
+	c, err := tao.Dial(network, addr, p.domain.Guard, p.domain.Keys.VerifyingKey, nil, nil)
 	if err != nil {
 		return nil, err
 	}

@@ -25,7 +25,7 @@ import (
 // DeserializeFileMessageStream takes a string description of the form
 // "tao::FileMessageChannel(X)" and returns a MessageStream that uses file
 // X to communicate.
-func DeserializeFileMessageStream(s string) (*MessageStream, error) {
+func DeserializeFileMessageStream(s string) (MessageStream, error) {
 	r := strings.TrimPrefix(s, "tao::FileMessageChannel(")
 	if r == s {
 		return nil, errors.New("unrecognized channel spec " + s)
@@ -45,7 +45,7 @@ func DeserializeFileMessageStream(s string) (*MessageStream, error) {
 // DeserializeFDMessageStream takes a string description of the form
 // "tao::FDMessageStream(X, Y)" and returns a MessageStream that uses file
 // descriptor X as the reader and file descriptor Y as the writer.
-func DeserializeFDMessageStream(s string) (*MessageStream, error) {
+func DeserializeFDMessageStream(s string) (MessageStream, error) {
 	var readfd, writefd uintptr
 	_, err := fmt.Sscanf(s, "tao::FDMessageChannel(%d, %d)", &readfd, &writefd)
 	if err != nil {
@@ -63,7 +63,7 @@ func DeserializeFDMessageStream(s string) (*MessageStream, error) {
 
 // DeserializeUnixSocketMessageStream takes a string filename and returns a
 // MessageStream that is based on the Unix socket for this file.
-func DeserializeUnixSocketMessageStream(f string) (*MessageStream, error) {
+func DeserializeUnixSocketMessageStream(f string) (MessageStream, error) {
 	conn, err := net.Dial("unix", f)
 	if err != nil {
 		return nil, err

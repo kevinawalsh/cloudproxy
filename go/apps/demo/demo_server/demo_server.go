@@ -17,8 +17,6 @@ package main
 import (
 	"bufio"
 	"crypto/tls"
-	"crypto/x509"
-	"crypto/x509/pkix"
 	"flag"
 	"fmt"
 	"net"
@@ -88,13 +86,8 @@ func doServer() {
 		// host". The resulting certificate, keys.Delegation, is a chain of
 		// "says" statements extending to the policy key. The policy is
 		// checked by the host before this program is executed.
-		keys, err = tao.NewTemporaryTaoDelegatedKeys(tao.Signing, tao.Parent())
+		keys, err = tao.NewTemporaryTaoDelegatedKeys(tao.Signing, nil, tao.Parent())
 		options.FailIf(err, "server: failed to generate delegated keys")
-
-		// Create a certificate for the hp.
-		keys.Cert, err = keys.SigningKey.CreateSelfSignedX509(&pkix.Name{
-			Organization: []string{"Google Tao Demo"}})
-		options.FailIf(err, "server: couldn't create certificate")
 
 		g := domain.Guard
 		if *ca != "" {
@@ -108,20 +101,12 @@ func doServer() {
 			options.FailIf(err, "server: couldn't set up a new guard")
 		}
 
-		tlsc, err := tao.EncodeTLSCert(keys)
-		options.FailIf(err, "server: couldn't encode TLS certificate")
-
-		conf := &tls.Config{
-			RootCAs:            x509.NewCertPool(),
-			Certificates:       []tls.Certificate{*tlsc},
-			InsecureSkipVerify: true,
-			ClientAuth:         tls.RequireAnyClientCert,
-		}
-
 		if *demoAuth == "tao" {
-			sock, err = tao.Listen(network, serverAddr, conf, g, domain.Keys.VerifyingKey, keys.Delegation)
+			sock, err = tao.Listen(network, serverAddr, keys, g, domain.Keys.VerifyingKey, nil)
 			options.FailIf(err, "sever: couldn't create a taonet listener")
 		} else {
+			conf, err := keys.TLSServerConfig(nil)
+			options.FailIf(err, "server: couldn't encode TLS certificate")
 			sock, err = tls.Listen(network, serverAddr, conf)
 			options.FailIf(err, "server: couldn't create a tls listener")
 		}

@@ -15,9 +15,6 @@
 package mixnet
 
 import (
-	"crypto/tls"
-	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/binary"
 	"errors"
 	"io"
@@ -55,19 +52,14 @@ type RouterContext struct {
 // network. A delegation is requested from the Tao t which is  nominally
 // the parent of this hosted program.
 func NewRouterContext(path, network, addr string, batchSize int, timeout time.Duration,
-	x509Identity *pkix.Name, t tao.Tao) (hp *RouterContext, err error) {
+	t tao.Tao) (hp *RouterContext, err error) {
 
 	hp = new(RouterContext)
 	hp.network = network
 	hp.timeout = timeout
 
 	// Generate keys and get attestation from parent.
-	if hp.keys, err = tao.NewTemporaryTaoDelegatedKeys(tao.Signing|tao.Crypting, t); err != nil {
-		return nil, err
-	}
-
-	// Create a certificate.
-	if hp.keys.Cert, err = hp.keys.SigningKey.CreateSelfSignedX509(x509Identity); err != nil {
+	if hp.keys, err = tao.NewTemporaryTaoDelegatedKeys(tao.Signing|tao.Crypting, nil, t); err != nil {
 		return nil, err
 	}
 
@@ -76,22 +68,8 @@ func NewRouterContext(path, network, addr string, batchSize int, timeout time.Du
 		return nil, err
 	}
 
-	// Encode TLS certificate.
-	cert, err := tao.EncodeTLSCert(hp.keys)
-	if err != nil {
-		return nil, err
-	}
-
-	tlsConfig := &tls.Config{
-		RootCAs:            x509.NewCertPool(),
-		Certificates:       []tls.Certificate{*cert},
-		InsecureSkipVerify: true,
-		ClientAuth:         tls.NoClientCert,
-	}
-
 	// Bind address to socket.
-	if hp.proxyListener, err = tao.ListenAnonymous(network, addr, tlsConfig,
-		hp.domain.Guard, hp.domain.Keys.VerifyingKey, hp.keys.Delegation); err != nil {
+	if hp.proxyListener, err = tao.Listen(network, addr, hp.keys, nil, nil, nil); err != nil {
 		return nil, err
 	}
 

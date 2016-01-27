@@ -30,7 +30,7 @@ import (
 // processes, or shutting down the host. A LinuxTao can be run in stacked mode
 // (on top of a host Tao) or in root mode (without an underlying host Tao).
 type LinuxHost struct {
-	Host        Host
+	Host           Host
 	path           string
 	guard          Guard
 	childFactory   HostedProgramFactory
@@ -55,7 +55,7 @@ func NewStackedLinuxHost(path string, guard Guard, hostTao Tao, childFactory Hos
 		}
 	}
 
-	k, err := NewOnDiskTaoSealedKeys(Signing|Crypting|Deriving, hostTao, path, SealPolicyDefault)
+	k, err := NewOnDiskTaoSealedKeys(Signing|Crypting|Deriving, nil, hostTao, path, SealPolicyDefault)
 	if err != nil {
 		return nil, err
 	}

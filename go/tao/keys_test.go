@@ -58,7 +58,7 @@ func TestSelfSignedX509(t *testing.T) {
 		Organization: proto.String("Google"),
 	}
 
-	_, err = s.CreateSelfSignedX509(NewX509Name(details))
+	_, err = s.CreateSelfSignedX509(s.X509Template(NewX509Name(details)))
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -117,7 +117,7 @@ func TestVerifierFromX509(t *testing.T) {
 		Organization: proto.String("Google"),
 	}
 
-	x, err := s.CreateSelfSignedX509(NewX509Name(details))
+	x, err := s.CreateSelfSignedX509(s.X509Template(NewX509Name(details)))
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -399,7 +399,7 @@ func TestTaoDelegatedKeys(t *testing.T) {
 		t.Fatal("Couldn't initialize a SoftTao:", err)
 	}
 
-	_, err = NewTemporaryTaoDelegatedKeys(Signing|Crypting|Deriving, ft)
+	_, err = NewTemporaryTaoDelegatedKeys(Signing|Crypting|Deriving, nil, ft)
 	if err != nil {
 		t.Fatal("Couldn't initialize a temporary hosted keyset:", err)
 	}
@@ -417,12 +417,12 @@ func TestNewOnDiskTaoSealedKeys(t *testing.T) {
 		t.Fatal("Couldn't initialize a SoftTao:", err)
 	}
 
-	_, err = NewOnDiskTaoSealedKeys(Signing|Crypting|Deriving, ft, tempDir, SealPolicyDefault)
+	_, err = NewOnDiskTaoSealedKeys(Signing|Crypting|Deriving, nil, ft, tempDir, SealPolicyDefault)
 	if err != nil {
 		t.Fatal("Couldn't initialize a hosted keyset:", err)
 	}
 
-	_, err = NewOnDiskTaoSealedKeys(Signing|Crypting|Deriving, ft, tempDir, SealPolicyDefault)
+	_, err = NewOnDiskTaoSealedKeys(Signing|Crypting|Deriving, nil, ft, tempDir, SealPolicyDefault)
 	if err != nil {
 		t.Fatal("Couldn't read back a sealed, hosted keyset:", err)
 	}
@@ -442,7 +442,7 @@ func TestUnsealedDelegatedKeysSaveLoad(t *testing.T) {
 		return
 	}
 
-	k, err := NewTemporaryTaoDelegatedKeys(Signing|Crypting|Deriving, ft)
+	k, err := NewTemporaryTaoDelegatedKeys(Signing|Crypting|Deriving, nil, ft)
 	if err != nil {
 		t.Error("failed to generate keys:", err)
 		return
@@ -467,7 +467,7 @@ func TestUnsealedUndelegatedKeysSaveLoad(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	k, err := NewTemporaryTaoDelegatedKeys(Signing|Crypting|Deriving, nil)
+	k, err := NewTemporaryTaoDelegatedKeys(Signing|Crypting|Deriving, nil, nil)
 	if err != nil {
 		t.Error("failed to generate keys:", err)
 		return

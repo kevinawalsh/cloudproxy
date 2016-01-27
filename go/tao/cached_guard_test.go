@@ -15,8 +15,8 @@
 package tao
 
 import (
-	"crypto/x509/pkix"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"os"
 	"path"
@@ -35,7 +35,6 @@ import (
 // TODO(cjpatton) Modify CreatePublicCachedDomain() to accept either (network,addr) or a
 // net.Conn. Modify this test to use net.Pipe instead of the loopback interface here.
 
-var password = make([]byte, 32)
 var prin = auth.NewKeyPrin([]byte("Alice"))
 
 func makeTestDomains(configDir, network, addr string, ttl int64) (policy *Domain, public *Domain, err error) {
@@ -49,7 +48,7 @@ func makeTestDomains(configDir, network, addr string, ttl int64) (policy *Domain
 	}
 	configPath := path.Join(configDir, "tao.config")
 
-	policy, err = CreateDomain(policyDomainConfig, configPath, password)
+	policy, err = CreateDomain(policyDomainConfig, configPath, PublicCachedDomainPassword)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -80,7 +79,10 @@ func TestCachingDatalogLoad(t *testing.T) {
 	network := "tcp"
 	addr := "localhost:0"
 	ttl := int64(1)
-	configDir := "/tmp/domain_test"
+	configDir, err := ioutil.TempDir("/tmp", "cached_guard_test")
+	if err != nil {
+		t.Fatal("Couldn't get a temp directory", err)
+	}
 
 	ch := make(chan bool)
 	cal, err := net.Listen(network, addr)
@@ -127,7 +129,10 @@ func TestCachingDatalogReload(t *testing.T) {
 	defer cal.Close()
 	addr = cal.Addr().String()
 
-	configDir := "/tmp/domain_test"
+	configDir, err := ioutil.TempDir("/tmp", "cached_guard_test")
+	if err != nil {
+		t.Fatal("Couldn't get a temp directory", err)
+	}
 	policyDomain, publicDomain, err := makeTestDomains(configDir, network, addr, ttl)
 	if err != nil {
 		t.Fatal(err)
@@ -184,7 +189,10 @@ func TestCachingDatalogValidatePeerAttestation(t *testing.T) {
 	network := "tcp"
 	addr := "localhost:0"
 	ttl := int64(1)
-	tmpDir := "/tmp/domain_test"
+	tmpDir, err := ioutil.TempDir("/tmp", "cached_guard_test")
+	if err != nil {
+		t.Fatal("Couldn't get a temp directory", err)
+	}
 
 	// Set up the TaoCA.
 	ch := make(chan bool)
@@ -213,7 +221,7 @@ func TestCachingDatalogValidatePeerAttestation(t *testing.T) {
 	}
 
 	// Generate a set of keys for the Tao-delegated server.
-	k, err := NewTemporaryTaoDelegatedKeys(Signing|Crypting|Deriving, nil)
+	k, err := NewTemporaryTaoDelegatedKeys(Signing|Crypting|Deriving, nil, nil)
 	if err != nil {
 		t.Error("failed to generate keys:", err)
 		return
@@ -268,14 +276,6 @@ func TestCachingDatalogValidatePeerAttestation(t *testing.T) {
 	}
 	k.Delegation.SerializedEndorsements = [][]byte{eab}
 
-	// Generate an x509 certificate for the Tao-delegated server.
-	k.Cert, err = k.SigningKey.CreateSelfSignedX509(&pkix.Name{
-		Organization: []string{"Identity of some Tao service"}})
-	if err != nil {
-		t.Error("failed to generate x509 certificate:", err)
-		return
-	}
-
 	// Run the TaoCA. This handles one request and then exits.
 	go runTCCA(t, cal, policy.Keys, policy.Guard, ch)
 
@@ -290,7 +290,11 @@ func TestCachingDatalogValidatePeerAttestation(t *testing.T) {
 
 	// Finally, the client verifies the Tao-delegated server is allowed to
 	// execute.
-	if err = ValidatePeerAttestation(k.Delegation, k.Cert, pub.Guard); err != nil {
+	p, err := ValidatePeerAttestation(k.Delegation, k.Cert["default"])
+	if err != nil {
 		t.Error("failed to verity attestation:", err)
+	}
+	if !pub.Guard.IsAuthorized(p, "Execute", nil) {
+		t.Error("failed to authorize")
 	}
 }
