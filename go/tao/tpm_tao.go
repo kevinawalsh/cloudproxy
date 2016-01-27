@@ -63,6 +63,29 @@ type TPMTao struct {
 	locality byte
 }
 
+// This is a hack, but it is vital that we call FinalizeTPMTao() if any TPMTao
+// was created, even if a goroutine panics, since the TPM will hold keys in
+// memory apparently permanently, across reboots. The only way to clear the keys
+// appears to be to reset the TPM entirely. There does not appear to be a clean
+// way to ensure the finalizer is called if a goroutine panics. As a best
+// effort, the last tpmTao created will be put into this global variable, and
+// panic/recover in various goroutines can call the finalizer manually. There is
+// no way to systematically get all goroutines, sadly.
+var lastCreatedTPMTao *TPMTao
+
+func ReleaseTPMResources() {
+	if lastCreatedTPMTao != nil {
+		FinalizeTPMTao(lastCreatedTPMTao)
+	}
+}
+
+func RecoverTPMResources() {
+	if r := recover(); r != nil {
+		ReleaseTPMResources()
+		panic(r)
+	}
+}
+
 // NewTPMTao creates a new TPMTao and returns it under the Tao interface.
 func NewTPMTao(tpmPath string, aikblob []byte, pcrNums []int) (Tao, error) {
 	var err error
@@ -86,6 +109,7 @@ func NewTPMTao(tpmPath string, aikblob []byte, pcrNums []int) (Tao, error) {
 	if err != nil {
 		return nil, err
 	}
+	lastCreatedTPMTao = tt
 
 	tt.verifier, err = tpm.UnmarshalRSAPublicKey(aikblob)
 	if err != nil {
@@ -160,7 +184,7 @@ func (tt *TPMTao) GetSharedSecret(n int, policy string) (bytes []byte, err error
 	return nil, errors.New("the TPMTao does not implement GetSharedSecret")
 }
 
-// Attest requests the Tao host sign a statement on behalf of the caller. The
+// Attest requests the Tao host sign a statement on behalf of a caller. The
 // optional issuer, time and expiration will be given default values if nil.
 func (tt *TPMTao) Attest(issuer *auth.Prin, start, expiration *int64, message auth.Form) (*Attestation, error) {
 	if issuer == nil {
@@ -300,8 +324,8 @@ func (tt *TPMTao) Unseal(sealed []byte) (data []byte, policy string, err error) 
 	return m, SealPolicyDefault, nil
 }
 
-// extractPCRs gets the PCRs from a tpm principal.
-func extractPCRs(p auth.Prin) ([]int, []byte, error) {
+// ExtractPCRs gets the PCRs from a tpm principal.
+func ExtractPCRs(p auth.Prin) ([]int, []byte, error) {
 	if p.Type != "tpm" {
 		return nil, nil, errors.New("can only extract PCRs from a TPM principal")
 	}
@@ -351,8 +375,8 @@ func extractPCRs(p auth.Prin) ([]int, []byte, error) {
 	return pcrNums, pcrVals, nil
 }
 
-// extractAIK gets an RSA public key from the TPM principal name.
-func extractAIK(p auth.Prin) (*rsa.PublicKey, error) {
+// ExtractAIK gets an RSA public key from the TPM principal name.
+func ExtractAIK(p auth.Prin) (*rsa.PublicKey, error) {
 	// The principal's Key should be a binary SubjectPublicKeyInfo.
 	if p.Type != "tpm" {
 		return nil, errors.New("wrong type of principal: should be 'tpm'")

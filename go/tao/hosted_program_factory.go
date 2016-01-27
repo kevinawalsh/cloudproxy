@@ -65,13 +65,34 @@ type HostedProgramSpec struct {
 
 	// Dir is the directory in which to start the program. If empty, a
 	// factory-specific default will be used, e.g. perhaps the tao host server's
-	// directory, or perhaps dirname(Path).
+	// directory, or perhaps dirname(Path). If non-empty, it should be absolute.
 	Dir string
 
 	// Env specifies the environment of the hosted program. If Env is nil, a
 	// factory-specific default environment will be used. Some factories may
 	// modify the environment, e.g. to pass certain parameters across a fork.
 	Env []string
+}
+
+// Cleanup cleans up open files.
+func (spec *HostedProgramSpec) Cleanup() error {
+	var err error
+	if spec.Stdin != nil {
+		if e := spec.Stdin.Close(); e != nil {
+			err = e
+		}
+	}
+	if spec.Stdout != nil {
+		if e := spec.Stdout.Close(); e != nil {
+			err = e
+		}
+	}
+	if spec.Stderr != nil {
+		if e := spec.Stderr.Close(); e != nil {
+			err = e
+		}
+	}
+	return err
 }
 
 // A HostedProgram is an abstraction of a process. It is closely related to
