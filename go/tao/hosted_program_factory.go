@@ -15,6 +15,7 @@
 package tao
 
 import (
+	"fmt"
 	"io"
 	"os"
 
@@ -79,6 +80,29 @@ type HostedProgramSpec struct {
 	Env []string
 }
 
+func (spec *HostedProgramSpec) Manifest() Manifest {
+	m := Manifest{}
+	if spec.Id != 0 {
+		m["ID"] = spec.Id
+	}
+	m["Container Type"] = spec.ContainerType
+	m["Path"] = spec.Path
+	if len(spec.Args) > 0 {
+		args := Manifest{}
+		for i, a := range spec.Args {
+			args[fmt.Sprintf("Argument %d", i)] = a
+		}
+		m["Arguments"] = args
+	}
+	m["User ID"] = spec.Uid
+	m["Group ID"] = spec.Gid
+	if spec.Dir != "" {
+		m["Initial Directory"] = spec.Dir
+	}
+	// Don't publish environment variables, they are often sensitive.
+	return m
+}
+
 // Cleanup cleans up open files.
 func (spec *HostedProgramSpec) Cleanup() error {
 	var err error
@@ -138,6 +162,9 @@ type HostedProgram interface {
 	// ExitStatus returns a factory-specific exit status code if
 	// the hosted program has exited.
 	ExitStatus() (int, error)
+
+	// Manifest returns information about the hosted program.
+	Manifest() Manifest
 }
 
 // HostedProgramInfo contains basic info about a HostedProgram and implements

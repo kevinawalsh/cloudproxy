@@ -369,6 +369,25 @@ func (lkcf *LinuxKVMCoreOSHostFactory) NewHostedProgram(spec HostedProgramSpec) 
 	return
 }
 
+func (kcc *KvmCoreOSHostContainer) Manifest() Manifest {
+	m := kcc.spec.Manifest()
+	vm := Manifest{}
+	vm["Linux Host Path"] = kcc.LHPath
+	vm["Linux Host Hash"] = kcc.LHHash
+	vm["CoreOS Image Path"] = kcc.Cfg.ImageFile
+	vm["CoreOS Image Hash"] = kcc.CoreOSHash
+	vm["Name"] = kcc.Cfg.Name
+	vm["Memory"] = kcc.Cfg.Memory
+	if kcc.Cfg.RulesPath != "" {
+		vm["Rules Path"] = kcc.Cfg.RulesPath
+	}
+	if kcc.Cfg.SSHKeysCfg != "" {
+		vm["SSH Keys Configuration"] = kcc.Cfg.SSHKeysCfg
+	}
+	m["Kernel Virtual Machine with Tao Linux Host"] = vm
+	return m
+}
+
 // FormatLinuxHostSubprin produces a string that represents a subprincipal with
 // the given ID and hash.
 func FormatLinuxHostSubprin(id uint, hash []byte) auth.SubPrin {

@@ -494,6 +494,41 @@ func (lkcf *KVMCoreOSFactory) NewHostedProgram(spec HostedProgramSpec) (child Ho
 	return
 }
 
+func (kcc *KvmCoreOSContainer) Manifest() Manifest {
+	m := kcc.spec.Manifest()
+	vm := Manifest{}
+	vm["CoreOS Image Path"] = kcc.Factory.CoreOSImage
+	vm["CoreOS Image Hash"] = kcc.Factory.CoreOSHash
+	if kcc.SSHCommand {
+		vm["Public SSH Key"] = kcc.Factory.PublicKey
+		vm["SSH Access Enabled"] = 1
+	} else {
+		vm["SSH Access Enabled"] = 0
+	}
+	vm["Name"] = kcc.VMName
+	vm["Hostname"] = kcc.Hostname
+	vm["Memory"] = kcc.Memory
+	if len(kcc.SSHAuthorizedKeys) > 0 {
+		keys := Manifest{}
+		for i, k := range kcc.SSHAuthorizedKeys {
+			keys[fmt.Sprintf("Key %d", i)] = k
+		}
+		vm["Authorized SSH Keys"] = keys
+	}
+	if len(kcc.MountFrom) > 0 {
+		dirs := Manifest{}
+		for i := range kcc.MountFrom {
+			dirs[fmt.Sprintf("Mount %d", i)] = Manifest{
+				"From": kcc.MountFrom[i],
+				"To":   kcc.MountTo[i],
+			}
+		}
+		vm["Mounted Directories"] = dirs
+	}
+	m["Kernel Virtual Machine"] = vm
+	return m
+}
+
 // FormatCoreOSCommandSubprin produces a string that represents a subprincipal
 // with the given ID and hash.
 func FormatCoreOSCommandSubprin(cmd string) auth.SubPrin {

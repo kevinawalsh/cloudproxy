@@ -73,6 +73,10 @@ func (d *DummyChild) ExitStatus() (int, error) {
 	return 0, nil
 }
 
+func (d *DummyChild) Manifest() Manifest {
+	return nil
+}
+
 func testNewLinuxHostTaoServer(t *testing.T) (Tao, error) {
 	lh, err := testNewRootLinuxHost()
 	if err != nil {
