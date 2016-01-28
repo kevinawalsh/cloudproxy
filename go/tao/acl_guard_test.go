@@ -19,12 +19,17 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
-	"strconv"
 	"testing"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/jlmucb/cloudproxy/go/tao/auth"
 )
+
+func rule(i int) string {
+	return fmt.Sprintf(`Authorized(prin(%d), "Foo")`, i)
+}
+
+var rule0 = rule(0)
 
 func makeACLGuard() (*ACLGuard, *Keys, string, error) {
 	tmpDir, err := ioutil.TempDir("", "acl_guard_test")
@@ -40,7 +45,7 @@ func makeACLGuard() (*ACLGuard, *Keys, string, error) {
 	config := ACLGuardDetails{
 		SignedAclsPath: proto.String(path.Join(tmpDir, "acls")),
 	}
-	tg := NewACLGuard(keys.VerifyingKey, config)
+	tg := NewSignedACLGuard(keys.VerifyingKey, config)
 
 	// Add a bogus rule.
 	p := auth.Prin{
@@ -61,7 +66,7 @@ func testNewACLGuard(t *testing.T, v *Verifier) (Guard, string) {
 	}
 
 	config := ACLGuardDetails{SignedAclsPath: proto.String(path.Join(tmpdir, "acls"))}
-	tg := NewACLGuard(v, config)
+	tg := NewSignedACLGuard(v, config)
 	return tg, tmpdir
 }
 
@@ -217,11 +222,11 @@ func TestACLGuardAddRule(t *testing.T) {
 	tg, tmpdir := testNewACLGuard(t, s.GetVerifier())
 	defer os.RemoveAll(tmpdir)
 
-	if err := tg.AddRule("Fake rule"); err != nil {
+	if err := tg.AddRule(rule0); err != nil {
 		t.Fatal("Couldn't add a fake rule to the ACL")
 	}
 
-	ret, err := tg.Query("Fake rule")
+	ret, err := tg.Query(rule0)
 	if err != nil {
 		t.Fatal("Couldn't query a fake rule from the ACLGuard:", err)
 	}
@@ -234,7 +239,7 @@ func TestACLGuardAddRule(t *testing.T) {
 		t.Fatal("Couldn't clear the ACLGuard:", err)
 	}
 
-	ret, err = tg.Query("Fake rule")
+	ret, err = tg.Query(rule0)
 	if err != nil {
 		t.Fatal("Couldn't query a fake rule after clearing the ACLGuard:", err)
 	}
@@ -253,11 +258,11 @@ func TestACLGuardRetractRule(t *testing.T) {
 	tg, tmpdir := testNewACLGuard(t, s.GetVerifier())
 	defer os.RemoveAll(tmpdir)
 
-	if err := tg.AddRule("Fake rule"); err != nil {
+	if err := tg.AddRule(rule0); err != nil {
 		t.Fatal("Couldn't add a fake rule to the ACL")
 	}
 
-	ret, err := tg.Query("Fake rule")
+	ret, err := tg.Query(rule0)
 	if err != nil {
 		t.Fatal("Couldn't query a fake rule from the ACLGuard:", err)
 	}
@@ -266,11 +271,11 @@ func TestACLGuardRetractRule(t *testing.T) {
 		t.Fatal("ACLGuard.Query did not return true for a rule that was added by AddRule")
 	}
 
-	if err := tg.RetractRule("Fake rule"); err != nil {
+	if err := tg.RetractRule(rule0); err != nil {
 		t.Fatal("Couldn't clear the ACLGuard:", err)
 	}
 
-	ret, err = tg.Query("Fake rule")
+	ret, err = tg.Query(rule0)
 	if err != nil {
 		t.Fatal("Couldn't query a fake rule after clearing the ACLGuard:", err)
 	}
@@ -291,8 +296,8 @@ func TestACLGuardRuleCount(t *testing.T) {
 
 	count := 20
 	for i := 0; i < count; i++ {
-		if err := tg.AddRule(strconv.Itoa(i)); err != nil {
-			t.Fatal("Couldn't add a rule that was a single integer as a string:", err)
+		if err := tg.AddRule(rule(i)); err != nil {
+			t.Fatal("Couldn't add a rule to acl guard:", err)
 		}
 	}
 
@@ -301,7 +306,7 @@ func TestACLGuardRuleCount(t *testing.T) {
 	}
 
 	// add the same rule again and make sure the RuleCount goes up.
-	if err := tg.AddRule("0"); err != nil {
+	if err := tg.AddRule(rule0); err != nil {
 		t.Fatal("Couldn't add the same rule twice to the list:", err)
 	}
 
@@ -309,7 +314,7 @@ func TestACLGuardRuleCount(t *testing.T) {
 		t.Fatal("Wrong rule count after adding a rule twice")
 	}
 
-	if err := tg.RetractRule("0"); err != nil {
+	if err := tg.RetractRule(rule0); err != nil {
 		t.Fatal("Couldn't retract a rule that had been added twice:", err)
 	}
 
@@ -329,12 +334,12 @@ func TestACLGuardGetRule(t *testing.T) {
 
 	count := 20
 	for i := 0; i < count; i++ {
-		if err := tg.AddRule(strconv.Itoa(i)); err != nil {
-			t.Fatal("Couldn't add a rule that was a single integer as a string:", err)
+		if err := tg.AddRule(rule(i)); err != nil {
+			t.Fatal("Couldn't add a rule to acl guard:", err)
 		}
 	}
 
-	if tg.GetRule(0) != "0" {
+	if tg.GetRule(0) != rule0 {
 		t.Fatal("Got the wrong rule from GetRule")
 	}
 
@@ -358,12 +363,12 @@ func TestACLGuardRuleDebugString(t *testing.T) {
 
 	count := 20
 	for i := 0; i < count; i++ {
-		if err := tg.AddRule(strconv.Itoa(i)); err != nil {
-			t.Fatal("Couldn't add a rule that was a single integer as a string:", err)
+		if err := tg.AddRule(rule(i)); err != nil {
+			t.Fatal("Couldn't add a rule to acl:", err)
 		}
 	}
 
-	if tg.RuleDebugString(0) != "0" {
+	if tg.RuleDebugString(0) != rule0 {
 		t.Fatal("Got the wrong rule from GetRule")
 	}
 
@@ -385,12 +390,12 @@ func TestACLGuardString(t *testing.T) {
 	tg, tmpdir := testNewACLGuard(t, s.GetVerifier())
 	defer os.RemoveAll(tmpdir)
 
-	if err := tg.AddRule("0"); err != nil {
-		t.Fatal("Couldn't add a rule that was a single integer as a string:", err)
+	if err := tg.AddRule(rule0); err != nil {
+		t.Fatal("Couldn't add a rule to acl:", err)
 	}
 
-	ss := "ACLGuard{\n0\n}"
+	ss := "ACLGuard{\n" + rule0 + "\n}"
 	if tg.String() != ss {
-		t.Fatalf("Got the wrong string representation of the ACLGuard: expected '%s', but got '%s'", tg.String(), ss)
+		t.Fatalf("Got the wrong string representation of the ACLGuard: expected '%s', but got '%s'", ss, tg.String())
 	}
 }

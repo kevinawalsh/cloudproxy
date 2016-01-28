@@ -16,6 +16,7 @@ package tao
 
 import (
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -40,7 +41,13 @@ const ACLGuardSigningContext = "tao.ACLGuard Version 1"
 const aclGuardFileMode os.FileMode = 0600
 
 // NewACLGuard produces a Guard implementation that implements ACLGuard.
-func NewACLGuard(key *Verifier, config ACLGuardDetails) Guard {
+func NewACLGuard() Guard {
+	return &ACLGuard{}
+}
+
+// NewSignedACLGuard produces a Guard implementation that implements ACLGuard
+// and can be stored or loaded from disk using a signed format.
+func NewSignedACLGuard(key *Verifier, config ACLGuardDetails) Guard {
 	return &ACLGuard{Config: config, Key: key}
 }
 
@@ -182,7 +189,13 @@ func (a *ACLGuard) IsAuthorized(name auth.Prin, op string, args []string) bool {
 // converted to either a string or integer.
 func (a *ACLGuard) AddRule(rule string) error {
 	glog.Infof("Adding rule '%s'", rule)
-	a.ACL = append(a.ACL, rule)
+	// Normalize the rule by scanning then reformatting.
+	var r auth.AnyForm
+	_, err := fmt.Sscanf("("+rule+")", "%v", &r)
+	if err != nil {
+		return err
+	}
+	a.ACL = append(a.ACL, r.Form.String())
 	return nil
 }
 
