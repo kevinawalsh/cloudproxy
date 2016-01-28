@@ -15,7 +15,7 @@
 package tao
 
 import (
-	"io"
+	"path"
 	"sync"
 	"time"
 
@@ -33,8 +33,8 @@ type LinuxHost struct {
 	Host           Host
 	path           string
 	guard          Guard
-	childFactory   HostedProgramFactory
-	hostedPrograms []*LinuxHostChild
+	childFactory   map[string]HostedProgramFactory
+	hostedPrograms []HostedProgram
 	hpm            sync.RWMutex
 	nextChildID    uint
 	idm            sync.Mutex
@@ -42,7 +42,7 @@ type LinuxHost struct {
 
 // NewStackedLinuxHost creates a new LinuxHost as a hosted program of an existing
 // host Tao.
-func NewStackedLinuxHost(path string, guard Guard, hostTao Tao, childFactory HostedProgramFactory) (*LinuxHost, error) {
+func NewStackedLinuxHost(path string, guard Guard, hostTao Tao, childFactory map[string]HostedProgramFactory) (*LinuxHost, error) {
 	lh := &LinuxHost{
 		path:         path,
 		guard:        guard,
@@ -70,7 +70,7 @@ func NewStackedLinuxHost(path string, guard Guard, hostTao Tao, childFactory Hos
 
 // NewRootLinuxHost creates a new LinuxHost as a standalone Host that can
 // provide the Tao to hosted Linux processes.
-func NewRootLinuxHost(path string, guard Guard, password []byte, childFactory HostedProgramFactory) (*LinuxHost, error) {
+func NewRootLinuxHost(path string, guard Guard, password []byte, childFactory map[string]HostedProgramFactory) (*LinuxHost, error) {
 	lh := &LinuxHost{
 		guard:        guard,
 		childFactory: childFactory,
@@ -88,34 +88,24 @@ func NewRootLinuxHost(path string, guard Guard, password []byte, childFactory Ho
 	return lh, nil
 }
 
-// LinuxHostChild holds state associated with a running child program.
-// TODO(kwalsh) Nothing in this is linux specific. Move channel and ChildSubprin
-// into (getter methods of) interface HostedProgram and eliminate this struct?
-// Also merge channel cleanup into HostedProgram.Cleanup()
-type LinuxHostChild struct {
-	channel      io.ReadWriteCloser
-	ChildSubprin auth.SubPrin
-	Cmd          HostedProgram
-}
-
 // GetTaoName returns the Tao name for the child.
-func (lh *LinuxHost) GetTaoName(child *LinuxHostChild) auth.Prin {
-	return lh.Host.HostName().MakeSubprincipal(child.ChildSubprin)
+func (lh *LinuxHost) GetTaoName(child HostedProgram) auth.Prin {
+	return lh.Host.HostName().MakeSubprincipal(child.Subprin())
 }
 
 // ExtendTaoName irreversibly extends the Tao principal name of the child.
-func (lh *LinuxHost) ExtendTaoName(child *LinuxHostChild, ext auth.SubPrin) error {
-	child.ChildSubprin = append(child.ChildSubprin, ext...)
+func (lh *LinuxHost) ExtendTaoName(child HostedProgram, ext auth.SubPrin) error {
+	child.Extend(ext)
 	return nil
 }
 
 // GetRandomBytes returns a slice of n random bytes for the child.
-func (lh *LinuxHost) GetRandomBytes(child *LinuxHostChild, n int) ([]byte, error) {
-	return lh.Host.GetRandomBytes(child.ChildSubprin, n)
+func (lh *LinuxHost) GetRandomBytes(child HostedProgram, n int) ([]byte, error) {
+	return lh.Host.GetRandomBytes(child.Subprin(), n)
 }
 
 // GetSharedSecret returns a slice of n secret bytes for the child.
-func (lh *LinuxHost) GetSharedSecret(child *LinuxHostChild, n int, policy string) ([]byte, error) {
+func (lh *LinuxHost) GetSharedSecret(child HostedProgram, n int, policy string) ([]byte, error) {
 	// Compute a tag based on the policy identifier and the child's subprin.
 	var tag string
 	switch policy {
@@ -127,7 +117,7 @@ func (lh *LinuxHost) GetSharedSecret(child *LinuxHostChild, n int, policy string
 		// LinuxHost.
 		// TODO(kwalsh) conservative policy could include PID or other
 		// child info.
-		tag = policy + "|" + child.ChildSubprin.String()
+		tag = policy + "|" + child.Subprin().String()
 	case SharedSecretPolicyLiberal:
 		// The most liberal we can do is allow any hosted process
 		// running on a similar LinuxHost instance.
@@ -139,7 +129,7 @@ func (lh *LinuxHost) GetSharedSecret(child *LinuxHostChild, n int, policy string
 }
 
 // Seal encrypts data for the child. This call also zeroes the data parameter.
-func (lh *LinuxHost) Seal(child *LinuxHostChild, data []byte, policy string) ([]byte, error) {
+func (lh *LinuxHost) Seal(child HostedProgram, data []byte, policy string) ([]byte, error) {
 	defer ZeroBytes(data)
 	lhsb := &LinuxHostSealedBundle{
 		Policy: proto.String(policy),
@@ -153,7 +143,7 @@ func (lh *LinuxHost) Seal(child *LinuxHostChild, data []byte, policy string) ([]
 		// and conservative policies means any process running the same
 		// program binary as the caller hosted on a similar
 		// LinuxHost.
-		lhsb.PolicyInfo = proto.String(child.ChildSubprin.String())
+		lhsb.PolicyInfo = proto.String(child.Subprin().String())
 	case SharedSecretPolicyLiberal:
 		// The most liberal we can do is allow any hosted process
 		// running on a similar LinuxHost instance. So, we don't set
@@ -174,7 +164,7 @@ func (lh *LinuxHost) Seal(child *LinuxHostChild, data []byte, policy string) ([]
 }
 
 // Unseal decrypts data for the child, but only if the policy is satisfied.
-func (lh *LinuxHost) Unseal(child *LinuxHostChild, sealed []byte) ([]byte, string, error) {
+func (lh *LinuxHost) Unseal(child HostedProgram, sealed []byte) ([]byte, string, error) {
 	decrypted, err := lh.Host.Decrypt(sealed)
 	if err != nil {
 		return nil, "", err
@@ -193,7 +183,7 @@ func (lh *LinuxHost) Unseal(child *LinuxHostChild, sealed []byte) ([]byte, strin
 	policy := *lhsb.Policy
 	switch policy {
 	case SharedSecretPolicyConservative, SharedSecretPolicyDefault:
-		if lhsb.PolicyInfo == nil || child.ChildSubprin.String() != *lhsb.PolicyInfo {
+		if lhsb.PolicyInfo == nil || child.Subprin().String() != *lhsb.PolicyInfo {
 			return nil, "", newError("principal not authorized for unseal")
 		}
 	case SharedSecretPolicyLiberal:
@@ -205,13 +195,19 @@ func (lh *LinuxHost) Unseal(child *LinuxHostChild, sealed []byte) ([]byte, strin
 	return lhsb.Data, policy, nil
 }
 
-// Attest signs a statement on behalf of the child.
-func (lh *LinuxHost) Attest(child *LinuxHostChild, issuer *auth.Prin, time, expiration *int64, stmt auth.Form) (*Attestation, error) {
-	return lh.Host.Attest(child.ChildSubprin, issuer, time, expiration, stmt)
+// Attest signs a statement on behalf of a child.
+func (lh *LinuxHost) Attest(child HostedProgram, issuer *auth.Prin, time, expiration *int64, stmt auth.Form) (*Attestation, error) {
+	return lh.Host.Attest(child.Subprin(), issuer, time, expiration, stmt)
 }
 
 // StartHostedProgram starts a new hosted program.
 func (lh *LinuxHost) StartHostedProgram(spec HostedProgramSpec) (auth.SubPrin, int, error) {
+	if !path.IsAbs(spec.Path) {
+		return auth.SubPrin{}, 0, newError("%s: Path must be absolute", spec.Path)
+	}
+	if spec.Dir != "" && !path.IsAbs(spec.Dir) {
+		return auth.SubPrin{}, 0, newError("%s: Dir must be absolute", spec.Dir)
+	}
 	lh.idm.Lock()
 	id := lh.nextChildID
 	if lh.nextChildID != 0 {
@@ -221,7 +217,11 @@ func (lh *LinuxHost) StartHostedProgram(spec HostedProgramSpec) (auth.SubPrin, i
 
 	spec.Id = id
 
-	prog, err := lh.childFactory.NewHostedProgram(spec)
+	factory := lh.childFactory[spec.ContainerType]
+	if factory == nil {
+		return auth.SubPrin{}, 0, newError("No suitable factory for starting container type %s", spec.ContainerType)
+	}
+	prog, err := factory.NewHostedProgram(spec)
 	if err != nil {
 		return auth.SubPrin{}, 0, err
 	}
@@ -239,27 +239,26 @@ func (lh *LinuxHost) StartHostedProgram(spec HostedProgramSpec) (auth.SubPrin, i
 		return auth.SubPrin{}, 0, newError("Hosted program %s denied authorization to execute on host %s", subprin, hostName)
 	}
 
-	channel, err := prog.Start()
-	if err != nil {
+	if err = prog.Start(); err != nil {
+		prog.Cleanup()
 		return auth.SubPrin{}, 0, err
 	}
-	child := &LinuxHostChild{channel, subprin, prog}
-	glog.Infof("Started hosted program with pid %d ...\n  path: %s\n  subprincipal: %s\n", child.Cmd.Pid(), spec.Path, subprin)
+	glog.Infof("Started hosted program with pid %d ...\n  path: %s\n  subprincipal: %s\n", prog.Pid(), spec.Path, subprin)
 
-	go NewLinuxHostTaoServer(lh, child).Serve(channel)
-	pid := child.Cmd.Pid()
+	go NewLinuxHostTaoServer(lh, prog).Serve(prog.Channel())
 
 	lh.hpm.Lock()
-	lh.hostedPrograms = append(lh.hostedPrograms, child)
+	lh.hostedPrograms = append(lh.hostedPrograms, prog)
 	lh.hpm.Unlock()
 
 	go func() {
-		<-child.Cmd.WaitChan()
-		glog.Infof("Hosted program with pid %d exited", child.Cmd.Pid())
+		<-prog.WaitChan()
+		status, err := prog.ExitStatus()
+		glog.Infof("Hosted program with pid %d exited with status %d (err=%s)", prog.Pid(), status, err)
 		lh.hpm.Lock()
 		for i, lph := range lh.hostedPrograms {
-			if child == lph {
-				var empty []*LinuxHostChild
+			if prog == lph {
+				var empty []HostedProgram
 				lh.hostedPrograms = append(append(empty, lh.hostedPrograms[:i]...), lh.hostedPrograms[i+1:]...)
 				break
 			}
@@ -267,22 +266,23 @@ func (lh *LinuxHost) StartHostedProgram(spec HostedProgramSpec) (auth.SubPrin, i
 		lh.hpm.Unlock()
 	}()
 
-	return subprin, pid, nil
+	return subprin, prog.Pid(), nil
 }
 
 // StopHostedProgram stops a running hosted program.
 func (lh *LinuxHost) StopHostedProgram(subprin auth.SubPrin) error {
+	var err error
 	lh.hpm.Lock()
 	defer lh.hpm.Unlock()
 	for _, lph := range lh.hostedPrograms {
-		if lph.ChildSubprin.Identical(subprin) {
-			lph.channel.Close()
-			if err := lph.Cmd.Stop(); err != nil {
-				glog.Errorf("Couldn't stop hosted program %d, subprincipal %s: %s\n", lph.Cmd.Pid(), subprin, err)
+		if lph.Subprin().Identical(subprin) {
+			err = lph.Stop()
+			if err != nil {
+				glog.Errorf("Couldn't stop hosted program %d, subprincipal %s: %s\n", lph.Pid(), subprin, err)
 			}
 		}
 	}
-	return nil
+	return err
 }
 
 // ListHostedPrograms returns a list of running hosted programs.
@@ -291,8 +291,8 @@ func (lh *LinuxHost) ListHostedPrograms() ([]auth.SubPrin, []int, error) {
 	subprins := make([]auth.SubPrin, len(lh.hostedPrograms))
 	pids := make([]int, len(lh.hostedPrograms))
 	for i, v := range lh.hostedPrograms {
-		subprins[i] = v.ChildSubprin
-		pids[i] = v.Cmd.Pid()
+		subprins[i] = v.Subprin()
+		pids[i] = v.Pid()
 	}
 	lh.hpm.RUnlock()
 	return subprins, pids, nil
@@ -301,9 +301,9 @@ func (lh *LinuxHost) ListHostedPrograms() ([]auth.SubPrin, []int, error) {
 // WaitHostedProgram waits for a running hosted program to exit.
 func (lh *LinuxHost) WaitHostedProgram(pid int, subprin auth.SubPrin) (int, error) {
 	lh.hpm.Lock()
-	var p *LinuxHostChild
+	var p HostedProgram
 	for _, lph := range lh.hostedPrograms {
-		if lph.Cmd.Pid() == pid && lph.ChildSubprin.Identical(subprin) {
+		if lph.Pid() == pid && lph.Subprin().Identical(subprin) {
 			p = lph
 			break
 		}
@@ -312,8 +312,8 @@ func (lh *LinuxHost) WaitHostedProgram(pid int, subprin auth.SubPrin) (int, erro
 	if p == nil {
 		return -1, newError("no such hosted program")
 	}
-	<-p.Cmd.WaitChan()
-	return p.Cmd.ExitStatus()
+	<-p.WaitChan()
+	return p.ExitStatus()
 }
 
 // KillHostedProgram kills a running hosted program.
@@ -321,10 +321,9 @@ func (lh *LinuxHost) KillHostedProgram(subprin auth.SubPrin) error {
 	lh.hpm.Lock()
 	defer lh.hpm.Unlock()
 	for _, lph := range lh.hostedPrograms {
-		if lph.ChildSubprin.Identical(subprin) {
-			lph.channel.Close()
-			if err := lph.Cmd.Kill(); err != nil {
-				glog.Errorf("Couldn't kill hosted program %d, subprincipal %s: %s\n", lph.Cmd.Pid(), subprin, err)
+		if lph.Subprin().Identical(subprin) {
+			if err := lph.Kill(); err != nil {
+				glog.Errorf("Couldn't kill hosted program %d, subprincipal %s: %s\n", lph.Pid(), subprin, err)
 			}
 		}
 	}
@@ -337,16 +336,15 @@ func (lh *LinuxHost) HostName() auth.Prin {
 }
 
 // Shutdown stops all hosted programs. If any remain after 10 seconds, they are
-// killed.
+// killed. Cleans up factories and temp directories.
 func (lh *LinuxHost) Shutdown() error {
 	glog.Infof("Stopping all hosted programs")
 	lh.hpm.Lock()
 	// Request each child stop
 	for _, lph := range lh.hostedPrograms {
-		// lph.channel.Close()
-		glog.Infof("Stopping hosted program %d\n", lph.Cmd.Pid())
-		if err := lph.Cmd.Stop(); err != nil {
-			glog.Errorf("Couldn't stop hosted program %d, subprincipal %s: %s\n", lph.Cmd.Pid(), lph.Cmd.Subprin(), err)
+		glog.Infof("Stopping hosted program %d\n", lph.Pid())
+		if err := lph.Stop(); err != nil {
+			glog.Errorf("Couldn't stop hosted program %d, subprincipal %s: %s\n", lph.Pid(), lph.Subprin(), err)
 		}
 	}
 	timeout := make(chan bool, 1)
@@ -363,14 +361,14 @@ func (lh *LinuxHost) Shutdown() error {
 	childWaitLoop:
 		for {
 			select {
-			case <-lph.Cmd.WaitChan():
+			case <-lph.WaitChan():
 				break childWaitLoop
 			case <-waiting:
 				glog.Infof("Waiting for hosted programs to stop")
 			case <-timeout:
-				glog.Infof("Killing hosted program %d, subprincipal %s\n", lph.Cmd.Pid(), lph.Cmd.Subprin())
-				if err := lph.Cmd.Kill(); err != nil {
-					glog.Errorf("Couldn't kill hosted program %d, subprincipal %s: %s\n", lph.Cmd.Pid(), lph.Cmd.Subprin(), err)
+				glog.Infof("Killing hosted program %d, subprincipal %s\n", lph.Pid(), lph.Subprin())
+				if err := lph.Kill(); err != nil {
+					glog.Errorf("Couldn't kill hosted program %d, subprincipal %s: %s\n", lph.Pid(), lph.Subprin(), err)
 				}
 				break childWaitLoop
 			}
@@ -378,9 +376,14 @@ func (lh *LinuxHost) Shutdown() error {
 	}
 	// Reap all children
 	for _, lph := range lh.hostedPrograms {
-		<-lph.Cmd.WaitChan()
+		<-lph.WaitChan()
 	}
 	lh.hostedPrograms = nil
 	lh.hpm.Unlock()
+
+	for _, factory := range lh.childFactory {
+		factory.Cleanup()
+	}
+
 	return nil
 }

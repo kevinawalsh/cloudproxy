@@ -76,7 +76,7 @@ func (t *StackedHost) GetSharedSecret(tag string, n int) (bytes []byte, err erro
 	return material, nil
 }
 
-// Attest requests the Tao host sign a statement on behalf of the caller.
+// Attest requests the Tao host sign a statement on behalf of a child.
 func (t *StackedHost) Attest(childSubprin auth.SubPrin, issuer *auth.Prin,
 	time, expiration *int64, message auth.Form) (*Attestation, error) {
 
@@ -95,6 +95,10 @@ func (t *StackedHost) Attest(childSubprin auth.SubPrin, issuer *auth.Prin,
 
 	stmt := auth.Says{Speaker: *issuer, Time: time, Expiration: expiration, Message: message}
 
+	return t.Say(stmt)
+}
+
+func (t *StackedHost) Say(stmt auth.Says) (*Attestation, error) {
 	var d []byte
 	if t.keys.Delegation != nil {
 		var err error

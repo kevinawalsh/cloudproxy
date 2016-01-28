@@ -50,9 +50,8 @@ func NewLinuxProcessFactory(channelType, socketPath string) HostedProgramFactory
 
 // A LinuxProcess represents a hosted program that executes as a linux process.
 type HostedProcess struct {
-
-	// The spec from which this process was created.
-	spec HostedProgramSpec
+	// The program hash
+	Hash []byte
 
 	// The value to be used as argv[0]
 	Argv0 string
@@ -63,17 +62,13 @@ type HostedProcess struct {
 	// A temporary directory for storing the temporary executable.
 	Tempdir string
 
-	// Hash of the executable.
-	Hash []byte
-
 	// The underlying process.
 	Cmd exec.Cmd
 
 	// The factory responsible for the hosted process.
 	Factory *LinuxProcessFactory
 
-	// A channel to be signaled when the process is done.
-	Done chan bool
+	HostedProgramInfo
 }
 
 // NewHostedProgram initializes, but does not start, a hosted process.
@@ -130,22 +125,29 @@ func (lpf *LinuxProcessFactory) NewHostedProgram(spec HostedProgramSpec) (child 
 	h := sha256.Sum256(b)
 
 	child = &HostedProcess{
-		spec:     spec,
+		HostedProgramInfo: HostedProgramInfo{
+			spec:    spec,
+			subprin: FormatProcessSubprin(spec.Id, h[:]),
+			Done:    make(chan bool, 1),
+		},
+		Hash:     h[:],
 		Argv0:    argv0,
 		Temppath: temppath,
 		Tempdir:  tempdir,
-		Hash:     h[:],
 		Factory:  lpf,
-		Done:     make(chan bool, 1),
 	}
 	return
+}
+
+func (lpf *LinuxProcessFactory) Cleanup() error {
+	return nil
 }
 
 // Use 24 bytes for the socket name.
 const sockNameLen = 24
 
-// Start starts the the hosted process and returns a tao channel to it.
-func (p *HostedProcess) Start() (channel io.ReadWriteCloser, err error) {
+// Start starts the the hosted process.
+func (p *HostedProcess) Start() (err error) {
 	var extraFiles []*os.File
 	var evar string
 	switch p.Factory.channelType {
@@ -165,7 +167,7 @@ func (p *HostedProcess) Start() (channel io.ReadWriteCloser, err error) {
 		}
 		defer clientRead.Close()
 
-		channel = util.NewPairReadWriteCloser(serverRead, serverWrite)
+		p.TaoChannel = util.NewPairReadWriteCloser(serverRead, serverWrite)
 		extraFiles = []*os.File{clientRead, clientWrite} // fd 3, fd 4
 
 		// Note: ExtraFiles below ensures readfd=3, writefd=4 in child
@@ -178,8 +180,8 @@ func (p *HostedProcess) Start() (channel io.ReadWriteCloser, err error) {
 		}
 		sockName := base64.URLEncoding.EncodeToString(nameBytes)
 		sockPath := path.Join(p.Factory.socketPath, sockName)
-		channel = util.NewUnixSingleReadWriteCloser(sockPath)
-		if channel == nil {
+		p.TaoChannel = util.NewUnixSingleReadWriteCloser(sockPath)
+		if p.TaoChannel == nil {
 			err = fmt.Errorf("Couldn't create a new Unix channel\n")
 			return
 		}
@@ -190,11 +192,16 @@ func (p *HostedProcess) Start() (channel io.ReadWriteCloser, err error) {
 	}
 	defer func() {
 		if err != nil {
-			channel.Close()
-			channel = nil
+			p.TaoChannel.Close()
+			p.TaoChannel = nil
 		}
 	}()
 
+	// TODO(kwalsh) LD_PRELOAD and other environment variables can have a
+	// significant impact on the hosted program, and the hosted program probably
+	// isn't able to reliably hash those variables, so we should probably hash
+	// them here. Similarly, shared libraries should probably be hashed by the
+	// factory.
 	env := p.spec.Env
 	if env == nil {
 		env = os.Environ()
@@ -292,8 +299,6 @@ func (p *HostedProcess) Start() (channel io.ReadWriteCloser, err error) {
 		close(p.Done) // prevent any more blocking
 	}()
 
-	// TODO(kwalsh) put channel into p, remove the struct in linux_host.go
-
 	return
 }
 
@@ -309,14 +314,9 @@ func (p *HostedProcess) ExitStatus() (int, error) {
 	return 0, fmt.Errorf("Couldn't get exit status\n")
 }
 
-// WaitChan returns a chan that will be signaled when the hosted process is
-// done.
-func (p *HostedProcess) WaitChan() <-chan bool {
-	return p.Done
-}
-
 // Kill kills an os/exec.Cmd process.
 func (p *HostedProcess) Kill() error {
+	p.TaoChannel.Close()
 	return p.Cmd.Process.Kill()
 }
 
@@ -327,19 +327,9 @@ func (p *HostedProcess) Stop() error {
 	return err
 }
 
-// Spec returns the specification used to start the hosted process.
-func (p *HostedProcess) Spec() HostedProgramSpec {
-	return p.spec
-}
-
 // Pid returns the pid of the underlying os/exec.Cmd instance.
 func (p *HostedProcess) Pid() int {
 	return p.Cmd.Process.Pid
-}
-
-// Subprin returns the subprincipal representing the hosted process.
-func (p *HostedProcess) Subprin() auth.SubPrin {
-	return FormatProcessSubprin(p.spec.Id, p.Hash)
 }
 
 // FormatProcessSubprin produces a string that represents a subprincipal with
@@ -354,7 +344,11 @@ func FormatProcessSubprin(id uint, hash []byte) auth.SubPrin {
 }
 
 func (p *HostedProcess) Cleanup() error {
-	// TODO(kwalsh) close channel, maybe also kill process if still running?
+	// TODO(kwalsh) need to kill process if still running?
+	if p.TaoChannel != nil {
+		p.TaoChannel.Close()
+	}
+	p.spec.Cleanup()
 	os.RemoveAll(p.Tempdir)
 	return nil
 }

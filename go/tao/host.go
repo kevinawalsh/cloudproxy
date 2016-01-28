@@ -36,9 +36,15 @@ type Host interface {
 	// GetSharedSecret returns a slice of n secret bytes.
 	GetSharedSecret(tag string, n int) (bytes []byte, err error)
 
-	// Attest requests the Tao host sign a statement on behalf of the caller.
+	// Attest requests the Tao host sign a statement on behalf of a child. The
+	// issuer can be the child (or nil) or a subprincipal of child, in which
+	// case child is not used except for checking that child is indeed a parent
+	// of the issuer.
 	Attest(childSubprin auth.SubPrin, issuer *auth.Prin,
 		time, expiration *int64, message auth.Form) (*Attestation, error)
+
+	// Say generates an attestation on behalf of the host.
+	Say(stmt auth.Says) (*Attestation, error)
 
 	// Encrypt data so that only this host can access it.
 	Encrypt(data []byte) (encrypted []byte, err error)

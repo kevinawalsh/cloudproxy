@@ -126,26 +126,27 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/jlmucb/cloudproxy/go/apps"
 	"github.com/jlmucb/cloudproxy/go/tao"
 	"github.com/jlmucb/cloudproxy/go/tao/auth"
 	"github.com/jlmucb/cloudproxy/go/util"
 	"github.com/jlmucb/cloudproxy/go/util/options"
+	"github.com/jlmucb/cloudproxy/go/util/verbose"
 	"golang.org/x/crypto/ssh/terminal"
 )
 
 var opts = []options.Option{
 	// Flags for all commands
-	{"tao_domain", "", "<dir>", "Tao domain configuration directory", "all,all+run"},
-	{"host", "", "<dir>", "Host configuration, relative to domain directory or absolute", "all,all+run"},
+	{"tao_domain", "", "<dir>", "Tao domain configuration directory", "all,run"},
+	{"host", "", "<dir>", "Host configuration, relative to domain directory or absolute", "all,run"},
 }
 
 var run_opts = []options.Option{
 	// Flags for run
-	{"pidfile", "", "<file>", "Write hosted program pid to this file", "run,all+run"},
-	{"namefile", "", "<file>", "Write hosted program subprin name to this file", "run,all+run"},
-	{"disown", false, "", "Don't wait for hosted program to exit", "run,all+run"},
-	{"daemon", false, "", "Don't pipe stdio or wait for hosted program to exit", "run,all+run"},
-	{"verbose", false, "", "Be more verbose", "run,all+run"},
+	{"pidfile", "", "<file>", "Write hosted program pid to this file", "run"},
+	{"namefile", "", "<file>", "Write hosted program subprin name to this file", "run"},
+	{"disown", false, "", "Don't wait for hosted program to exit", "run"},
+	{"daemon", false, "", "Don't pipe stdio or wait for hosted program to exit", "run"},
 }
 
 func init() {
@@ -158,8 +159,6 @@ func init() {
 		options.Add(run_opts...)
 	}
 }
-
-var noise = ioutil.Discard
 
 func help() {
 	w := new(tabwriter.Writer)
@@ -184,7 +183,7 @@ func help() {
 	case "tao_run":
 		fmt.Fprintf(w, "Usage: %s [options] <prog> [args...]\n", av0)
 		categories := []options.Category{
-			{"all+run", "Options"},
+			{"all,run", "Options"},
 			{"logging", "Options to control log output"},
 		}
 		options.ShowRelevant(w, categories...)
@@ -193,7 +192,8 @@ func help() {
 		fmt.Fprintf(w, "Usage:\n")
 		fmt.Fprintf(w, "  %s run [options] [process:]<prog> [args...]\t Run a new hosted process\n", av0)
 		fmt.Fprintf(w, "  %s run [options] docker:<img> [dockerargs...] [-- [imgargs...]]\t Run a new hosted docker image\n", av0)
-		fmt.Fprintf(w, "  %s run [options] kvm_coreos:<img> [dockerargs...] [-- [imgargs...]]\t Run a new hosted QEMU/kvm CoreOS image\n", av0)
+		fmt.Fprintf(w, "  %s run [options] kvm_coreos:<img> [kvmargs...] [-- [cmdargs...]]\t Run a new command on a QEMU/kvm CoreOS image\n", av0)
+		fmt.Fprintf(w, "  %s run [options] kvm_coreos_linuxhost:<img> [kvmargs...] [-- [cmdargs...]]\t Run a new process under a new linuxhost on a QEMU/kvm CoreOS image\n", av0)
 		fmt.Fprintf(w, "  %s list [options]\t List hosted programs\n", av0)
 		fmt.Fprintf(w, "  %s stop [options] subprin [subprin...]\t Stop hosted programs\n", av0)
 		fmt.Fprintf(w, "  %s stop [options] subprin [subprin...]\t Kill hosted programs\n", av0)
@@ -226,10 +226,6 @@ func main() {
 		if flag.NArg() > 1 {
 			flag.CommandLine.Parse(flag.Args()[1:])
 		}
-	}
-
-	if b, ok := options.Bool["verbose"]; ok && *b {
-		noise = os.Stderr
 	}
 
 	sockPath := path.Join(hostPath(), "admin_socket")
@@ -295,16 +291,16 @@ func runHosted(client *tao.LinuxHostAdminClient, args []string) {
 
 	spec := new(tao.HostedProgramSpec)
 
-	ctype := "process"
+	spec.ContainerType = "process"
 	spec.Path = args[0]
-	for _, prefix := range []string{"process", "docker", "kvm_coreos"} {
+	for _, prefix := range []string{"process", "docker", "kvm_coreos", "kvm_coreos_linuxhost"} {
 		if strings.HasPrefix(spec.Path, prefix+":") {
-			ctype = prefix
+			spec.ContainerType = prefix
 			spec.Path = strings.TrimPrefix(spec.Path, prefix+":")
 		}
 	}
 
-	switch ctype {
+	switch spec.ContainerType {
 	case "process":
 		dirs := util.LiberalSearchPath()
 		binary := util.FindExecutable(args[0], dirs)
@@ -314,12 +310,22 @@ func runHosted(client *tao.LinuxHostAdminClient, args []string) {
 		spec.ContainerArgs = []string{spec.Path}
 		spec.Args = args[1:]
 		spec.Path = binary
-	case "docker", "kvm_coreos":
+	case "kvm_coreos":
+		spec.ContainerArgs, spec.Args = split(args[1:], "--")
+		// TODO(kwalsh) Put memory, other qemu args into container args.
+	case "docker", "kvm_coreos_linuxhost":
 		// args contains [ "docker:argv0", docker_args..., "--", prog_args... ]
 		spec.ContainerArgs, spec.Args = split(args, "--")
 		// Replace docker arg 0 with valid image name constructed from // base(argv[0]).
 		r, _ := regexp.Compile("[^a-zA-Z0-9_.]+")
 		spec.ContainerArgs[0] = r.ReplaceAllLiteralString(path.Base(spec.Path), "_")
+	}
+
+	spec.Dir, err = os.Getwd()
+	options.FailIf(err, "Can't get working directory")
+
+	if !path.IsAbs(spec.Path) {
+		spec.Path = path.Join(spec.Dir, spec.Path)
 	}
 
 	pidfile := *options.String["pidfile"]
@@ -370,11 +376,8 @@ func runHosted(client *tao.LinuxHostAdminClient, args []string) {
 		}
 		spec.Stdout = os.Stdout
 		spec.Stderr = os.Stderr
-		fmt.Fprintf(noise, "[proxying stdin]\n")
+		verbose.Printf("[proxying stdin]\n")
 	}
-
-	spec.Dir, err = os.Getwd()
-	options.FailIf(err, "Can't get working directory")
 
 	// Start catching signals early, buffering a few, so we don't miss any. We
 	// don't proxy SIGTTIN. However, we do catch it and stop ourselves, rather
@@ -425,8 +428,8 @@ func runHosted(client *tao.LinuxHostAdminClient, args []string) {
 	// Start the hosted program
 	subprin, pid, err := client.StartHostedProgram(spec)
 	options.FailIf(err, "Can't start hosted program")
-	fmt.Fprintf(noise, "[started hosted program with pid %d]\n", pid)
-	fmt.Fprintf(noise, "[subprin is %v]\n", subprin)
+	verbose.Printf("[started hosted program with pid %d]\n", pid)
+	verbose.Printf("[subprin is %v]\n", subprin)
 
 	if pidOut != nil {
 		fmt.Fprintln(pidOut, pid)
@@ -453,7 +456,7 @@ func runHosted(client *tao.LinuxHostAdminClient, args []string) {
 
 	wasForeground := false
 	if proxying && isForeground() {
-		fmt.Fprintf(noise, "[in foreground]\n")
+		verbose.Printf("[in foreground]\n")
 		dropSIGTTIN()
 		wasForeground = true
 	}
@@ -489,7 +492,7 @@ func runHosted(client *tao.LinuxHostAdminClient, args []string) {
 	for next != done {
 		select {
 		case s := <-status:
-			fmt.Fprintf(noise, "[hosted program exited, %s]\n", exitCode(s))
+			verbose.Printf("[hosted program exited, %s]\n", exitCode(s))
 			next = done
 		case sig := <-signals:
 			next = handle(sig, pid)
@@ -501,7 +504,7 @@ func runHosted(client *tao.LinuxHostAdminClient, args []string) {
 			for next == resumed {
 				select {
 				case s := <-status:
-					fmt.Fprintf(noise, "[hosted program exited, %s]\n", exitCode(s))
+					verbose.Printf("[hosted program exited, %s]\n", exitCode(s))
 					next = done
 				case sig := <-signals:
 					next = handle(sig, pid)
@@ -532,14 +535,14 @@ func handle(sig os.Signal, pid int) todo {
 	switch sig {
 	case syscall.SIGTSTP:
 		send(pid, syscall.SIGTSTP)
-		fmt.Fprintf(noise, "[stopping]\n")
+		verbose.Printf("[stopping]\n")
 		syscall.Kill(syscall.Getpid(), syscall.SIGSTOP)
 		time.Sleep(moment)
-		fmt.Fprintf(noise, "[resuming]\n")
+		verbose.Printf("[resuming]\n")
 		send(pid, syscall.SIGCONT)
 		return resumed
 	case syscall.SIGHUP: // tty hangup (e.g. via disown)
-		noise = ioutil.Discard
+		verbose.Set(false)
 		os.Stdin.Close()
 		os.Stdout.Close()
 		os.Stderr.Close()
@@ -558,12 +561,12 @@ func handle(sig os.Signal, pid int) todo {
 var discard = make(chan os.Signal, 1) // minimal buffering
 
 func defaultSIGTTIN() {
-	fmt.Fprintf(noise, "[default SIGTTIN handling]\n")
+	verbose.Printf("[default SIGTTIN handling]\n")
 	signal.Stop(discard)
 }
 
 func dropSIGTTIN() {
-	fmt.Fprintf(noise, "[dropping SIGTTIN]\n")
+	verbose.Printf("[dropping SIGTTIN]\n")
 	signal.Notify(discard, syscall.SIGTTIN)
 }
 
@@ -587,33 +590,33 @@ func isCtty(fd int) bool {
 	var s syscall.Stat_t
 	err := syscall.Fstat(fd, &s)
 	if err != nil {
-		fmt.Fprintf(noise, "[warning: fstat(%d) failed: %v]\n", fd, err)
+		verbose.Printf("[warning: fstat(%d) failed: %v]\n", fd, err)
 		return true
 	}
 	name := "/proc/self/stat"
 	f, err := os.Open(name)
 	if err != nil {
-		fmt.Fprintf(noise, "[warning: open(%q) failed: %v]\n", name, err)
+		verbose.Printf("[warning: open(%q) failed: %v]\n", name, err)
 		return true
 	}
 	b, err := ioutil.ReadAll(f)
 	if err != nil {
-		fmt.Fprintf(noise, "[warning: read(%q) failed: %v]\n", name, err)
+		verbose.Printf("[warning: read(%q) failed: %v]\n", name, err)
 		return true
 	}
 	a := strings.Split(string(b), " ")
 	tty_nr := 6
 	if len(a) <= tty_nr {
-		fmt.Fprintf(noise, "[warning: read(%q) borked: only %d fields]\n", name, len(a))
+		verbose.Printf("[warning: read(%q) borked: only %d fields]\n", name, len(a))
 		return true
 	}
 	ctty, err := strconv.Atoi(a[tty_nr])
 	if err != nil {
-		fmt.Fprintf(noise, "[warning: read(%q) borked: tty_nr = %v]\n", name, a[tty_nr])
+		verbose.Printf("[warning: read(%q) borked: tty_nr = %v]\n", name, a[tty_nr])
 		return true
 	}
 	if uint64(ctty) != s.Rdev {
-		fmt.Fprintf(noise, "[warning: stdin is a tty, but not ctty]\n")
+		verbose.Printf("[warning: stdin is a tty, but not ctty]\n")
 		return false
 	}
 	return true
@@ -636,7 +639,7 @@ func isForeground() bool {
 // exits. That seems unlikely. To fix it, we would have to coordinate with
 // linux_host, e.g. have linux_host send the signal on our behalf.
 func send(pid int, sig syscall.Signal) {
-	fmt.Fprintf(noise, "[sending %s to hosted program]\n", sigName(sig))
+	verbose.Printf("[sending %s to hosted program]\n", sigName(sig))
 	syscall.Kill(pid, sig)
 }
 
@@ -684,24 +687,13 @@ func exitCode(s int) string {
 	}
 }
 
-func domainPath() string {
-	if path := *options.String["tao_domain"]; path != "" {
-		return path
-	}
-	if path := os.Getenv("TAO_DOMAIN"); path != "" {
-		return path
-	}
-	options.Usage("Must supply -tao_domain or set $TAO_DOMAIN")
-	return ""
-}
-
 func hostPath() string {
 	hostPath := *options.String["host"]
 	if hostPath == "" {
 		hostPath = "linux_tao_host"
 	}
 	if !path.IsAbs(hostPath) {
-		hostPath = path.Join(domainPath(), hostPath)
+		hostPath = path.Join(apps.TaoDomainPath(), hostPath)
 	}
 	return hostPath
 }

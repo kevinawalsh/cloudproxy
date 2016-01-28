@@ -30,8 +30,13 @@ type HostedProgramSpec struct {
 	// zero, it will be omitted.
 	Id uint
 
+	// ContainerType specifies the type of container in which to start the
+	// executable: "process", "docker", etc.
+	ContainerType string
+
 	// Path specifies a file, e.g. an executable or a vm image, to be
-	// executed in some factory-specific way.
+	// executed in some factory-specific way. It should be an absolute
+	// path.
 	Path string
 
 	// Args are passed to the hosted program in some factory-specific way,
@@ -105,8 +110,11 @@ type HostedProgram interface {
 	// Subprin returns the subprincipal representing the hosted program.
 	Subprin() auth.SubPrin
 
-	// Start starts the the hosted program and returns a tao channel to it.
-	Start() (io.ReadWriteCloser, error)
+	// Extend adds components to the subprincipal for the hosted program.
+	Extend(ext auth.SubPrin)
+
+	// Start starts the the hosted program.
+	Start() error
 
 	// Kill kills the hosted program and cleans up resources.
 	Kill() error
@@ -114,9 +122,14 @@ type HostedProgram interface {
 	// Stop stops the hosted program and cleans up resources.
 	Stop() error
 
+	// Channel returns the channel the child uses for the tao api.
+	Channel() io.ReadWriteCloser
+
+	// WaitChan returns a chan that will be signaled when the hosted process is
+	// done.
 	WaitChan() <-chan bool
 
-	// Cleanup cleans up resources, such as temporary files.
+	// Cleanup cleans up resources, such as temporary or open files.
 	Cleanup() error
 
 	// Pid returns a factory-specific numeric identifier.
@@ -127,6 +140,49 @@ type HostedProgram interface {
 	ExitStatus() (int, error)
 }
 
+// HostedProgramInfo contains basic info about a HostedProgram and implements
+// part of the HostedProgram interface.
+type HostedProgramInfo struct {
+
+	// The spec from which this hosted program was created.
+	spec HostedProgramSpec
+
+	// A channel to be signaled when the hosted program is done.
+	Done chan bool
+
+	// The channel serving the tao api to this hosted program.
+	TaoChannel io.ReadWriteCloser
+
+	// The current subprincipal for the hosted program.
+	subprin auth.SubPrin
+}
+
+// Spec returns the specification used to start the hosted program.
+func (p *HostedProgramInfo) Spec() HostedProgramSpec {
+	return p.spec
+}
+
+// WaitChan returns a chan that will be signaled when the hosted process is
+// done.
+func (p *HostedProgramInfo) WaitChan() <-chan bool {
+	return p.Done
+}
+
+// Channel returns the channel the child uses for the tao api.
+func (p *HostedProgramInfo) Channel() io.ReadWriteCloser {
+	return p.TaoChannel
+}
+
+// Subprin returns the subprincipal representing the hosted process.
+func (p *HostedProgramInfo) Subprin() auth.SubPrin {
+	return p.subprin
+}
+
+// Extend adds components to the subprincipal for the hosted program.
+func (p *HostedProgramInfo) Extend(ext auth.SubPrin) {
+	p.subprin = append(p.subprin, ext...)
+}
+
 // A HostedProgramFactory manages the creation of hosted programs. For example,
 // on Linux, it might create processes using fork, or it might create processes
 // running on docker containers. It might also start a virtual machine
@@ -135,4 +191,6 @@ type HostedProgramFactory interface {
 
 	// NewHostedProgram initializes, but does not start, a hosted program.
 	NewHostedProgram(spec HostedProgramSpec) (HostedProgram, error)
+
+	Cleanup() error
 }

@@ -29,24 +29,24 @@ import (
 	"text/tabwriter"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/jlmucb/cloudproxy/go/apps"
 	"github.com/jlmucb/cloudproxy/go/tao"
 	"github.com/jlmucb/cloudproxy/go/util"
 	"github.com/jlmucb/cloudproxy/go/util/options"
-	"golang.org/x/crypto/ssh/terminal"
+	"github.com/jlmucb/cloudproxy/go/util/verbose"
 )
+
+var emptylist []string
 
 var opts = []options.Option{
 	// Flags for all/most commands
 	{"tao_domain", "", "<dir>", "Tao domain configuration directory", "all"},
 	{"host", "", "<dir>", "Host configuration, relative to domain directory or absolute", "all"},
-	{"quiet", false, "", "Be more quiet", "all"},
 
 	// Flags for init (and start) command
 	{"root", false, "", "Create a root host, not backed by any parent Tao", "init,start"},
 	{"stacked", false, "", "Create a stacked host, backed by a parent Tao", "init,start"},
-	// TODO(kwalsh) hosted program type should be selectable at time of
-	// tao_launch. A single host should be able to host all types concurrently.
-	{"hosting", "", "<type>", "Hosted program type: process, docker, or kvm_coreos", "init"},
+	{"hosting", emptylist, "<type>[,<type>...]", "Hosted program type: process, docker, kvm_coreos, or kvm_coreos_linuxhost", "init"},
 	{"socket_dir", "", "<dir>", "Hosted program socket directory, relative to host directory or absolute", "init"},
 
 	// Flags for start command
@@ -66,8 +66,6 @@ var opts = []options.Option{
 	// Flags for QEMU/KVM CoreOS init
 	{"kvm_coreos_img", "", "<path>", "Path to CoreOS.img file, relative to domain or absolute", "kvm"},
 	{"kvm_coreos_vm_memory", 0, "SIZE", "The amount of RAM (in KB) to give VM", "kvm"},
-	// TODO(kwalsh) shouldn't keys be generated randomly within the host?
-	// Otherwise, we need to trust whoever holds the keys, no?
 	{"kvm_coreos_ssh_auth_keys", "", "<path>", "An authorized_keys file for SSH to CoreOS guest, relative to domain or absolute", "kvm"},
 }
 
@@ -102,13 +100,9 @@ func help() {
 	w.Flush()
 }
 
-var noise = ioutil.Discard
-
-// Main provides the main functionality of linux_host. This is provided as a
-// separate function to allow other code to register other Tao implementations
-// (with tao.Register) before starting the code.
 func Main() {
 	flag.Usage = help
+	verbose.Set(true)
 
 	// Get options before the command verb
 	flag.Parse()
@@ -122,17 +116,14 @@ func Main() {
 		flag.CommandLine.Parse(flag.Args()[1:])
 	}
 
-	if !*options.Bool["quiet"] {
-		noise = os.Stdout
-	}
-
 	// Load the domain.
-	domain, err := tao.LoadDomain(domainConfigPath(), nil)
+	cpath := path.Join(apps.TaoDomainPath(), "tao.config")
+	domain, err := tao.LoadDomain(cpath, nil)
 	options.FailIf(err, "Can't load domain")
 
 	// Set $TAO_DOMAIN so it will be inherited by hosted programs
 	os.Unsetenv("TAO_DOMAIN")
-	err = os.Setenv("TAO_DOMAIN", domainPath())
+	err = os.Setenv("TAO_DOMAIN", apps.TaoDomainPath())
 	options.FailIf(err, "Can't set $TAO_DOMAIN")
 
 	switch cmd {
@@ -151,21 +142,6 @@ func Main() {
 	}
 }
 
-func domainPath() string {
-	if path := *options.String["tao_domain"]; path != "" {
-		return path
-	}
-	if path := os.Getenv("TAO_DOMAIN"); path != "" {
-		return path
-	}
-	options.Usage("Must supply -tao_domain or set $TAO_DOMAIN")
-	return ""
-}
-
-func domainConfigPath() string {
-	return path.Join(domainPath(), "tao.config")
-}
-
 func hostPath() string {
 	hostPath := *options.String["host"]
 	if hostPath == "" {
@@ -173,7 +149,7 @@ func hostPath() string {
 		hostPath = "linux_tao_host"
 	}
 	if !path.IsAbs(hostPath) {
-		hostPath = path.Join(domainPath(), hostPath)
+		hostPath = path.Join(apps.TaoDomainPath(), hostPath)
 	}
 	return hostPath
 }
@@ -190,12 +166,8 @@ func configureFromOptions(cfg *tao.LinuxHostConfig) {
 		cfg.Type = proto.String("root")
 	} else if *options.Bool["stacked"] {
 		cfg.Type = proto.String("stacked")
-	} else if cfg.Type == nil {
-		options.Usage("Must supply one of -root and -stacked")
 	}
-	if s := *options.String["hosting"]; s != "" {
-		cfg.Hosting = proto.String(s)
-	}
+	cfg.Hosting = append(cfg.Hosting, options.Strings["hosting"]...)
 	if s := *options.String["parent_type"]; s != "" {
 		cfg.ParentType = proto.String(s)
 	}
@@ -231,34 +203,35 @@ func configureFromFile() *tao.LinuxHostConfig {
 func loadHost(domain *tao.Domain, cfg *tao.LinuxHostConfig) (*tao.LinuxHost, error) {
 	var tc tao.Config
 
-	// Decide host type
+	// Sanity check host type
+	var stacked bool
 	switch cfg.GetType() {
 	case "root":
-		tc.HostType = tao.Root
+		stacked = false
 	case "stacked":
-		tc.HostType = tao.Stacked
+		stacked = true
 	case "":
-		options.Usage("Must supply -hosting flag")
+		options.Usage("Must supply -root or -stacked flag")
 	default:
 		options.Usage("Invalid host type: %s", cfg.GetType())
 	}
 
-	// Decide hosting type
-	switch cfg.GetHosting() {
-	case "process":
-		tc.HostedType = tao.ProcessPipe
-	case "docker":
-		tc.HostedType = tao.DockerUnix
-	case "kvm_coreos":
-		tc.HostedType = tao.KVMCoreOSFile
-	case "":
+	// Sanity check hosting type
+	hosting := make(map[string]bool)
+	for _, h := range cfg.GetHosting() {
+		switch h {
+		case "process", "docker", "kvm_coreos", "kvm_coreos_linuxhost":
+			hosting[h] = true
+		default:
+			options.Usage("Invalid hosting type: %s", cfg.GetHosting())
+		}
+	}
+	if len(hosting) == 0 {
 		options.Usage("Must supply -hosting flag")
-	default:
-		options.Usage("Invalid hosting type: %s", cfg.GetHosting())
 	}
 
 	// For stacked hosts, figure out the channel type: TPM, pipe, file, or unix
-	if tc.HostType == tao.Stacked {
+	if stacked {
 		switch cfg.GetParentType() {
 		case "TPM":
 			tc.HostChannelType = "tpm"
@@ -269,23 +242,18 @@ func loadHost(domain *tao.Domain, cfg *tao.LinuxHostConfig) (*tao.LinuxHost, err
 		case "unix":
 			tc.HostChannelType = "unix"
 		case "":
-			options.Usage("Must supply -parent_type for stacked hosts")
+			// leave channel type blank, tao may find it in env vars
+			tc.HostChannelType = ""
 		default:
 			options.Usage("Invalid parent type: %s", cfg.GetParentType())
 		}
 
-		// For stacked hosts on anything but a TPM, we also need parent spec
-		if tc.HostChannelType != "tpm" {
-			tc.HostSpec = cfg.GetParentSpec()
-			if tc.HostSpec == "" {
-				options.Usage("Must supply -parent_spec for non-TPM stacked hosts")
-			}
-		} else {
-			// For stacked hosts on a TPM, we also need info from domain config
-			if domain.Config.TpmInfo == nil {
-				options.Usage("Must provide TPM configuration in the domain to use a TPM")
-			}
-			tc.TPMAIKPath = path.Join(domainPath(), domain.Config.TpmInfo.GetAikPath())
+		// For stacked hosts, we may also have a parent spec from command line
+		tc.HostSpec = cfg.GetParentSpec()
+
+		// For stacked hosts on a TPM, we may also have tpm info from domain config
+		if domain.Config.TpmInfo != nil {
+			tc.TPMAIKPath = path.Join(apps.TaoDomainPath(), domain.Config.TpmInfo.GetAikPath())
 			tc.TPMPCRs = domain.Config.TpmInfo.GetPcrs()
 			tc.TPMDevice = domain.Config.TpmInfo.GetTpmPath()
 		}
@@ -293,7 +261,7 @@ func loadHost(domain *tao.Domain, cfg *tao.LinuxHostConfig) (*tao.LinuxHost, err
 
 	rulesPath := ""
 	if p := domain.RulesPath(); p != "" {
-		rulesPath = path.Join(domainPath(), p)
+		rulesPath = path.Join(apps.TaoDomainPath(), p)
 	}
 
 	// Create the hosted program factory
@@ -307,21 +275,50 @@ func loadHost(domain *tao.Domain, cfg *tao.LinuxHostConfig) (*tao.LinuxHost, err
 	}
 
 	// TODO(cjpatton) How do the NewLinuxDockerContainterFactory and the
-	// NewLinuxKVMCoreOSFactory need to be modified to support the new
+	// NewLinuxKVMCoreOSHostFactory need to be modified to support the new
 	// CachedGuard? They probably don't.
-	var childFactory tao.HostedProgramFactory
-	switch tc.HostedType {
-	case tao.ProcessPipe:
-		childFactory = tao.NewLinuxProcessFactory("pipe", socketPath)
-	case tao.DockerUnix:
-		childFactory = tao.NewLinuxDockerContainerFactory(socketPath, rulesPath)
-	case tao.KVMCoreOSFile:
+	childFactory := make(map[string]tao.HostedProgramFactory)
+	if hosting["process"] {
+		childFactory["process"] = tao.NewLinuxProcessFactory("pipe", socketPath)
+	}
+	if hosting["docker"] {
+		childFactory["docker"] = tao.NewLinuxDockerContainerFactory(socketPath, rulesPath)
+	}
+	if hosting["kvm_coreos"] {
+		// TODO(kwalsh) re-enable this code path in new kvm factory
+		// sshFile := cfg.GetKvmCoreosSshAuthKeys()
+		// if sshFile != "" {
+		// if !path.IsAbs(sshFile) {
+		// 	sshFile = path.Join(apps.TaoDomainPath(), sshFile)
+		// }
+		// sshKeysCfg, err := io.ReadFile(sshFile)
+		// options.FailIf(err, "Can't read ssh authorized keys")
+
+		coreOSImage := cfg.GetKvmCoreosImg()
+		if coreOSImage == "" {
+			options.Usage("Must specify -kvm_coreos_image for hosting QEMU/KVM CoreOS")
+		}
+		if !path.IsAbs(coreOSImage) {
+			coreOSImage = path.Join(apps.TaoDomainPath(), coreOSImage)
+		}
+
+		// TODO(kwalsh) re-enable this code path in new kvm factory
+		// vmMemory := cfg.GetKvmCoreosVmMemory()
+		// if vmMemory == 0 {
+		// 	vmMemory = 1024
+		// }
+
+		var err error
+		childFactory["kvm_coreos"], err = tao.NewKVMCoreOSFactory(coreOSImage, false)
+		options.FailIf(err, "Can't create KVM CoreOS factory")
+	}
+	if hosting["kvm_coreos_linuxhost"] {
 		sshFile := cfg.GetKvmCoreosSshAuthKeys()
 		if sshFile == "" {
 			options.Usage("Must specify -kvm_coreos_ssh_auth_keys for hosting QEMU/KVM CoreOS")
 		}
 		if !path.IsAbs(sshFile) {
-			sshFile = path.Join(domainPath(), sshFile)
+			sshFile = path.Join(apps.TaoDomainPath(), sshFile)
 		}
 		sshKeysCfg, err := tao.CloudConfigFromSSHKeys(sshFile)
 		options.FailIf(err, "Can't read ssh keys")
@@ -331,7 +328,7 @@ func loadHost(domain *tao.Domain, cfg *tao.LinuxHostConfig) (*tao.LinuxHost, err
 			options.Usage("Must specify -kvm_coreos_image for hosting QEMU/KVM CoreOS")
 		}
 		if !path.IsAbs(coreOSImage) {
-			coreOSImage = path.Join(domainPath(), coreOSImage)
+			coreOSImage = path.Join(apps.TaoDomainPath(), coreOSImage)
 		}
 
 		vmMemory := cfg.GetKvmCoreosVmMemory()
@@ -339,25 +336,26 @@ func loadHost(domain *tao.Domain, cfg *tao.LinuxHostConfig) (*tao.LinuxHost, err
 			vmMemory = 1024
 		}
 
-		cfg := &tao.CoreOSConfig{
+		cfg := &tao.CoreOSLinuxhostConfig{
 			ImageFile:  coreOSImage,
 			Memory:     int(vmMemory),
 			RulesPath:  rulesPath,
 			SSHKeysCfg: sshKeysCfg,
 		}
-		childFactory, err = tao.NewLinuxKVMCoreOSFactory(socketPath, cfg)
-		options.FailIf(err, "Can't create KVM CoreOS factory")
+
+		childFactory["kvm_coreos_linuxhost"], err = tao.NewLinuxKVMCoreOSHostFactory(socketPath, cfg)
+		options.FailIf(err, "Can't create KVM CoreOS LinuxHost factory")
 	}
 
-	if tc.HostType == tao.Root {
-		pwd := getKey("root host key password", "pass")
+	if !stacked {
+		pwd := options.Password("root host key password", "pass")
 		return tao.NewRootLinuxHost(hostPath(), domain.Guard, pwd, childFactory)
 	} else {
 		parent := tao.ParentFromConfig(tc)
 		if parent == nil {
-			options.Usage("No host tao available, verify -parent_type or $%s\n", tao.HostChannelTypeEnvVar)
+			options.Usage("No host tao available, verify -parent_type (or $%s) and associated variables\n", tao.HostChannelTypeEnvVar)
 		}
-		return tao.NewStackedLinuxHost(hostPath(), domain.Guard, tao.ParentFromConfig(tc), childFactory)
+		return tao.NewStackedLinuxHost(hostPath(), domain.Guard, parent, childFactory)
 	}
 }
 
@@ -425,10 +423,10 @@ func daemonize() {
 		}
 		err = daemon.Start()
 		options.FailIf(err, "Can't become daemon")
-		fmt.Fprintf(noise, "Linux Tao Host running as daemon\n")
+		verbose.Printf("Linux Tao Host running as daemon\n")
 		os.Exit(0)
 	} else {
-		fmt.Fprintf(noise, "Already a session leader?\n")
+		verbose.Printf("Already a session leader?\n")
 	}
 }
 
@@ -463,9 +461,9 @@ func startHost(domain *tao.Domain) {
 	}
 
 	go func() {
-		fmt.Fprintf(noise, "Linux Tao Service (%s) started and waiting for requests\n", host.HostName())
+		verbose.Printf("Linux Tao Service (%s) started and waiting for requests\n", host.HostName())
 		err = tao.NewLinuxHostAdminServer(host).Serve(sock)
-		fmt.Fprintf(noise, "Linux Tao Service finished\n")
+		verbose.Printf("Linux Tao Service finished\n")
 		sock.Close()
 		options.FailIf(err, "Error serving admin requests")
 		os.Exit(0)
@@ -474,7 +472,7 @@ func startHost(domain *tao.Domain) {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, os.Kill, syscall.SIGTERM)
 	<-c
-	fmt.Fprintf(noise, "Linux Tao Service shutting down\n")
+	verbose.Printf("Linux Tao Service shutting down\n")
 	err = shutdown()
 	if err != nil {
 		sock.Close()
@@ -484,7 +482,7 @@ func startHost(domain *tao.Domain) {
 	// The above goroutine will normally end by calling os.Exit(), so we
 	// can block here indefinitely. But if we get a second kill signal,
 	// let's abort.
-	fmt.Fprintf(noise, "Waiting for shutdown....\n")
+	verbose.Printf("Waiting for shutdown....\n")
 	<-c
 	options.Fail(nil, "Could not shut down linux_host")
 }
@@ -504,18 +502,4 @@ func shutdown() error {
 	}
 	defer conn.Close()
 	return tao.NewLinuxHostAdminClient(conn).Shutdown()
-}
-
-func getKey(prompt, name string) []byte {
-	if input := *options.String[name]; input != "" {
-		fmt.Fprintf(os.Stderr, "Warning: Passwords on the command line are not secure. Use -%s option only for testing.\n", name)
-		return []byte(input)
-	} else {
-		// Get the password from the user.
-		fmt.Print(prompt + ": ")
-		pwd, err := terminal.ReadPassword(syscall.Stdin)
-		options.FailIf(err, "Can't get password")
-		fmt.Println()
-		return pwd
-	}
 }
