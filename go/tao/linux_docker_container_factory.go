@@ -39,15 +39,10 @@ import (
 // code doesn't depend on the docker code for now.
 type DockerContainer struct {
 
-	// The spec from which this process was created.
-	spec HostedProgramSpec
-
-	// Hash of the docker image.
-	Hash []byte
-
 	// The factory responsible for the hosted process.
 	Factory *LinuxDockerContainerFactory
 
+	Hash        []byte
 	ImageName   string
 	SocketPath  string
 	CidfilePath string
@@ -56,17 +51,12 @@ type DockerContainer struct {
 	// The underlying docker process.
 	Cmd *exec.Cmd
 
-	// A channel to be signaled when the vm is done.
-	Done chan bool
-}
-
-// WaitChan returns a chan that will be signaled when the hosted vm is done.
-func (dc *DockerContainer) WaitChan() <-chan bool {
-	return dc.Done
+	HostedProgramInfo
 }
 
 // Kill sends a SIGKILL signal to a docker container.
 func (dc *DockerContainer) Kill() error {
+	dc.TaoChannel.Close()
 	cid, err := dc.ContainerName()
 	if err != nil {
 		return err
@@ -96,50 +86,6 @@ func docker(stdin io.Reader, cmd string, args ...string) error {
 			"end docker output\n", err, cmd, args, b.String())
 	}
 	return err
-}
-
-// StartDocker starts a docker container using the docker run subcommand.
-func (dc *DockerContainer) StartDocker() error {
-	args := []string{"run", "--rm=true", "-v", dc.SocketPath + ":/tao"}
-	args = append(args, "--cidfile", dc.CidfilePath)
-	if dc.RulesPath != "" {
-		args = append(args, "-v", dc.RulesPath+":/"+path.Base(dc.RulesPath))
-	}
-	// ContainerArgs has a name plus args passed directly to docker, i.e. before
-	// image name. Args are passed to the ENTRYPOINT within the Docker image,
-	// i.e. after image name.
-	// Note: Uid, Gid, Dir, and Env do not apply to docker hosted programs.
-	if len(dc.spec.ContainerArgs) > 1 {
-		args = append(args, dc.spec.ContainerArgs[1:]...)
-	}
-	args = append(args, dc.ImageName)
-	args = append(args, dc.spec.Args...)
-	dc.Cmd = exec.Command("docker", args...)
-	dc.Cmd.Stdin = dc.spec.Stdin
-	dc.Cmd.Stdout = dc.spec.Stdout
-	dc.Cmd.Stderr = dc.spec.Stderr
-
-	err := dc.Cmd.Start()
-	if err != nil {
-		return err
-	}
-	// Reap the child when the process dies.
-	go func() {
-		sc := make(chan os.Signal, 1)
-		signal.Notify(sc, syscall.SIGCHLD)
-		<-sc
-		dc.Cmd.Wait()
-		signal.Stop(sc)
-
-		time.Sleep(1 * time.Second)
-		docker(nil, "rmi", dc.ImageName)
-		dc.Done <- true
-		os.Remove(dc.CidfilePath)
-		close(dc.Done) // prevent any more blocking
-	}()
-
-	return nil
-	// TODO(kwalsh) put channel into p, remove the struct in linux_host.go
 }
 
 // Stop sends a SIGSTOP signal to a docker container.
@@ -184,6 +130,10 @@ func NewLinuxDockerContainerFactory(sockDir, rulesPath string) HostedProgramFact
 	}
 }
 
+func (ldcf *LinuxDockerContainerFactory) Cleanup() error {
+	return nil
+}
+
 // NewHostedProgram initializes, but does not start, a hosted docker container.
 func (ldcf *LinuxDockerContainerFactory) NewHostedProgram(spec HostedProgramSpec) (child HostedProgram, err error) {
 
@@ -192,7 +142,7 @@ func (ldcf *LinuxDockerContainerFactory) NewHostedProgram(spec HostedProgramSpec
 	if len(spec.ContainerArgs) >= 1 {
 		argv0 = spec.ContainerArgs[0]
 	}
-	img := argv0 + ":" + getRandomFileName(nameLen)
+	img := argv0 + ":" + randName()
 
 	inf, err := os.Open(spec.Path)
 	defer inf.Close()
@@ -209,25 +159,21 @@ func (ldcf *LinuxDockerContainerFactory) NewHostedProgram(spec HostedProgramSpec
 
 	hash := hasher.Sum(nil)
 
+	// TODO(kwalsh) We should probably hash the configuration used to run the
+	// docker container, including custom arguments for the docker container.
+
 	child = &DockerContainer{
-		spec:      spec,
-		ImageName: img,
+		HostedProgramInfo: HostedProgramInfo{
+			spec:    spec,
+			subprin: FormatDockerSubprin(spec.Id, hash),
+			Done:    make(chan bool, 1),
+		},
 		Hash:      hash,
+		ImageName: img,
 		Factory:   ldcf,
-		Done:      make(chan bool, 1),
 	}
 
 	return
-}
-
-// Spec returns the specification used to start the hosted docker container.
-func (dc *DockerContainer) Spec() HostedProgramSpec {
-	return dc.spec
-}
-
-// Subprin returns the subprincipal representing the hosted docker container..
-func (dc *DockerContainer) Subprin() auth.SubPrin {
-	return FormatProcessSubprin(dc.spec.Id, dc.Hash)
 }
 
 // FormatDockerSubprin produces a string that represents a subprincipal with the
@@ -242,24 +188,26 @@ func FormatDockerSubprin(id uint, hash []byte) auth.SubPrin {
 }
 
 // Start builds the docker container from the tar file and launches it.
-func (dc *DockerContainer) Start() (channel io.ReadWriteCloser, err error) {
+func (dc *DockerContainer) Start() (err error) {
 
-	s := path.Join(dc.Factory.SocketDir, getRandomFileName(nameLen))
+	s := path.Join(dc.Factory.SocketDir, randName())
 	dc.SocketPath = s + ".sock"
 	dc.CidfilePath = s + ".cid"
 
 	dc.RulesPath = dc.Factory.RulesPath
 
-	channel = util.NewUnixSingleReadWriteCloser(dc.SocketPath)
+	dc.TaoChannel = util.NewUnixSingleReadWriteCloser(dc.SocketPath)
 	defer func() {
 		if err != nil {
-			channel.Close()
-			channel = nil
+			dc.TaoChannel.Close()
+			dc.TaoChannel = nil
 		}
 	}()
 
 	args := []string{"run", "--rm=true", "-v", dc.SocketPath + ":/tao"}
 	args = append(args, "--cidfile", dc.CidfilePath)
+	args = append(args, "--env", HostChannelTypeEnvVar+"="+"unix")
+	args = append(args, "--env", HostSpecEnvVar+"="+"/tao")
 	if dc.RulesPath != "" {
 		args = append(args, "-v", dc.RulesPath+":/"+path.Base(dc.RulesPath))
 	}
@@ -296,11 +244,14 @@ func (dc *DockerContainer) Start() (channel io.ReadWriteCloser, err error) {
 		close(dc.Done) // prevent any more blocking
 	}()
 
-	// TODO(kwalsh) put channel into dc, remove the struct in linux_host.go
 	return
 }
 
-func (p *DockerContainer) Cleanup() error {
-	// TODO(kwalsh) close channel, maybe also kill process if still running?
+func (dc *DockerContainer) Cleanup() error {
+	// TODO(kwalsh) need to kill docker container if still running?
+	if dc.TaoChannel != nil {
+		dc.TaoChannel.Close()
+	}
+	dc.spec.Cleanup()
 	return nil
 }

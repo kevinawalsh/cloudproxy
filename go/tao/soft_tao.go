@@ -41,11 +41,11 @@ func NewSoftTao(path string, password []byte) (Tao, error) {
 		s.keys, err = NewOnDiskPBEKeys(Signing|Crypting|Deriving, password, path, nil)
 	}
 
-	s.name = s.keys.VerifyingKey.ToPrincipal()
-
 	if err != nil {
 		return nil, err
 	}
+
+	s.name = s.keys.VerifyingKey.ToPrincipal()
 
 	return s, nil
 }

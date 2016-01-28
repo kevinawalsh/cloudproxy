@@ -26,7 +26,7 @@ TAO="$(gowhich tao)"
 SCRIPT_PATH="$(readlink -e "$(dirname "$0")")"
 TEMPLATE_SRC="${SCRIPT_PATH}"/domain_template.pb
 DOMAIN=$(mktemp -d /tmp/domain.XXXXXX)
-TEMPLATE=$(mktemp /tmp/domain_template.XXXXXX)
+TEMPLATE="$DOMAIN/domain_template.pb"
 HOST_REL_PATH="linux_tao_host"
 
 # Used to encrypt policy keys (as well as the keys for SoftTao) on disk.
@@ -56,8 +56,7 @@ sed "s/REPLACE_WITH_DOMAIN_GUARD_TYPE/$GUARD/g" "$TEMPLATE_SRC" > $TEMPLATE
 
 # SoftTao: generate root keys for signing, attestation, and sealing.
 if [ "$TYPE" == "Soft" ]; then
-  KEY_NAME=$("$TAO" domain newsoft -soft_pass $FAKE_PASS \
-    -config_template $TEMPLATE $DOMAIN/linux_tao_host)
+  KEY_NAME=$("$TAO" domain -tao_domain $DOMAIN newsoft -soft_pass $FAKE_PASS $DOMAIN/linux_tao_host)
   KEY_NAME=$(echo -n "$KEY_NAME") # Remove newline
 
   # Specify key principal as host name.
@@ -65,17 +64,22 @@ if [ "$TYPE" == "Soft" ]; then
 fi
 
 # Now create the domain itself. This generates a configuration file and a
-# private/public key pair in policy_keys/{signer,cert}, the activity
+# private/public key pair in policy_keys/{signer,cert.der}, the activity
 # owner's root key.
-"$TAO" domain init -tao_domain $DOMAIN \
-  -config_template $TEMPLATE -pub_domain_address "$CA_ADDR" \
+"$TAO" domain init -tao_domain $DOMAIN -pub_domain_address "$CA_ADDR" \
   -pass $FAKE_PASS
+
+# TPMTao: add TPM principal to domain, if one exists.
+if [ "$TYPE" == "TPM" ]; then
+  cp "$AIK_PATH" ${DOMAIN}/aikblob
+fi
+
 
 # Also initialize a default linux host
 if [ "$TYPE" == "Soft" ]; then
   "$TAO" host init -tao_domain $DOMAIN -hosting process -root -pass $FAKE_PASS
 else
-  "$TAO" host init -tao_domain $DOMAIN -hosting process -stacked -parent_type tpm 
+  "$TAO" host init -tao_domain $DOMAIN -hosting process -stacked -parent_type TPM 
 fi
 
 # Create the docker images.
@@ -87,27 +91,24 @@ fi
 # Add domain-specific hashes to the policy (e.g. linux_host, demo_client,
 # and demo_server).
 "$TAO" domain policy -add_host -add_programs -add_containers -add_vms \
-  -add_linux_host -add_guard -tao_domain $DOMAIN -pass $FAKE_PASS \
-  -config_template $TEMPLATE
+  -add_linux_host -add_guard -tao_domain $DOMAIN -pass $FAKE_PASS
 
 # TPMTao: add TPM principal to domain, if one exists.
 if [ "$TYPE" == "TPM" ]; then
-  sudo "$TAO" domain policy -add_tpm \
-    -pass $FAKE_PASS -tao_domain $DOMAIN -config_template $TEMPLATE
-  cp "$AIK_PATH" ${DOMAIN}/aikblob
+  sudo "$TAO" domain policy -add_tpm -pass $FAKE_PASS -tao_domain $DOMAIN
 fi
-
-rm $TEMPLATE
 
 # If we're using a soft Tao, and a public Tao domain was created, we need to
 # copy the root signing key and certificate.
 if [ "$#" == "3" ] && [ "$TYPE" == "Soft" ]; then
   mkdir -p "${DOMAIN}.pub/${HOST_REL_PATH}"
-  cp $DOMAIN/$HOST_REL_PATH/{cert,keys,host.config} "${DOMAIN}.pub/${HOST_REL_PATH}"
+  cp $DOMAIN/$HOST_REL_PATH/{cert.der,keys,host.config} "${DOMAIN}.pub/${HOST_REL_PATH}"
   echo "Temp public domain directory: ${DOMAIN}.pub"
 fi
 
 echo "Tao domain created in $DOMAIN"
 echo "To use this as the default for tao commands, use:"
 echo "  export TAO_DOMAIN=$DOMAIN"
+echo "or, rename it to:"
+echo "  /etc/tao"
 
