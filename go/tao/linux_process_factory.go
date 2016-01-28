@@ -139,6 +139,12 @@ func (lpf *LinuxProcessFactory) NewHostedProgram(spec HostedProgramSpec) (child 
 	return
 }
 
+func (p *HostedProcess) Manifest() Manifest {
+	m := p.spec.Manifest()
+	m["Program Hash"] = p.Hash
+	return m
+}
+
 func (lpf *LinuxProcessFactory) Cleanup() error {
 	return nil
 }

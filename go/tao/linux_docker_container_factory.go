@@ -176,6 +176,14 @@ func (ldcf *LinuxDockerContainerFactory) NewHostedProgram(spec HostedProgramSpec
 	return
 }
 
+func (dc *DockerContainer) Manifest() Manifest {
+	m := dc.spec.Manifest()
+	m["Program Hash"] = dc.Hash
+	m["Docker Image Name"] = dc.ImageName
+	m["Docker Rules Path"] = dc.Factory.RulesPath
+	return m
+}
+
 // FormatDockerSubprin produces a string that represents a subprincipal with the
 // given ID and hash.
 func FormatDockerSubprin(id uint, hash []byte) auth.SubPrin {

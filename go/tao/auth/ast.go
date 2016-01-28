@@ -111,6 +111,17 @@ type Prin struct {
 	Ext  SubPrin // zero or more extensions for descendents
 }
 
+func (p *Prin) Parent() *Prin {
+	if len(p.Ext) == 0 {
+		return nil
+	}
+	ext := make([]PrinExt, len(p.Ext)-1)
+	for i := 0; i < len(p.Ext)-1; i++ {
+		ext[i] = p.Ext[i]
+	}
+	return &Prin{p.Type, p.Key, ext}
+}
+
 // PrinExt is an extension of a principal.
 type PrinExt struct {
 	Name string // [A-Z][a-zA-Z0-9_]*
@@ -224,6 +235,12 @@ func (f Says) Commences() bool {
 // Expires checks if statement f has an expiration time.
 func (f Says) Expires() bool {
 	return f.Expiration != nil
+}
+
+// Active checks if time t is within the bounds defined by the expiration and
+// commencement times of statement f.
+func (f Says) Active(t int64) bool {
+	return (f.Time == nil || t >= *f.Time) && (f.Expiration == nil || t < *f.Expiration)
 }
 
 // Forall conveys formula "(forall Var : Body)" where Var ranges over Terms.

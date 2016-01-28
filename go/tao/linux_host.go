@@ -239,6 +239,9 @@ func (lh *LinuxHost) StartHostedProgram(spec HostedProgramSpec) (auth.SubPrin, i
 		return auth.SubPrin{}, 0, newError("Hosted program %s denied authorization to execute on host %s", subprin, hostName)
 	}
 
+	m := prog.Manifest()
+	m.Publish(lh.Host, subprin)
+
 	if err = prog.Start(); err != nil {
 		prog.Cleanup()
 		return auth.SubPrin{}, 0, err
