@@ -199,7 +199,7 @@ func (d *Domain) CreatePublicCachedDomain(network, addr string, ttl int64) (*Dom
 
 	// Create domain directory ending with ".pub".
 	configDir = strings.TrimRight(configDir, "/") + ".pub"
-	err = os.MkdirAll(configDir, 0777)
+	err = util.MkdirAll(configDir, 0777)
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +210,7 @@ func (d *Domain) CreatePublicCachedDomain(network, addr string, ttl int64) (*Dom
 	// TODO(tmroeder) this is a bit hacky, but the best we can do short
 	// of refactoring the NewOnDiskPBEKey() code. In particular, there is
 	// currently no way to *just* save the keys.
-	err = os.MkdirAll(newDomain.Keys.dir, 0777)
+	err = util.MkdirAll(newDomain.Keys.dir, 0777)
 	if err != nil {
 		return nil, err
 	}
