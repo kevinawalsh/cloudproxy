@@ -375,10 +375,10 @@ func (t Prin) MakeSubprincipal(e SubPrin) Prin {
 	return other
 }
 
-// MakePredicate creates a predicate with the given name and arguments.
+// MakeTerms converts each argument into a Term and returns the resulting list.
 // Arguments can be Prin, Int (or integer types that be coerced to it), Str (or
 // string), or PrinTail. Anything else is coerced to Str.
-func MakePredicate(name string, arg ...interface{}) Pred {
+func MakeTerms(arg ...interface{}) []Term {
 	terms := make([]Term, len(arg))
 	for i, a := range arg {
 		switch a := a.(type) {
@@ -418,7 +418,21 @@ func MakePredicate(name string, arg ...interface{}) Pred {
 			terms[i] = Str(fmt.Sprintf("%v", a))
 		}
 	}
-	return Pred{name, terms}
+	return terms
+}
+
+// MakePredicate creates a predicate with the given name and arguments.
+// Arguments can be Prin, Int (or integer types that be coerced to it), Str (or
+// string), or PrinTail. Anything else is coerced to Str.
+func MakePredicate(name string, arg ...interface{}) Pred {
+	return Pred{name, MakeTerms(arg...)}
+}
+
+// MakePrinExt creates a subprincipal extension with the given name and arguments.
+// Arguments can be Prin, Int (or integer types that be coerced to it), Str (or
+// string), or PrinTail. Anything else is coerced to Str.
+func MakePrinExt(name string, arg ...interface{}) PrinExt {
+	return PrinExt{name, MakeTerms(arg...)}
 }
 
 // NewKeyPrin returns a new Prin of type "key" with the given key material.
