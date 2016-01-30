@@ -98,6 +98,12 @@ func NewTPMTao(tpmPath string, aikblob []byte, pcrNums []int) (Tao, error) {
 	// Make sure the TPMTao releases all its resources
 	runtime.SetFinalizer(tt, FinalizeTPMTao)
 
+	// Flush all previously-loaded keys.
+	handles, _ := tpm.GetKeys(tt.tpmfile)
+	for _, h := range handles {
+		h.CloseKey(tt.tpmfile)
+	}
+
 	// For now, the SRK Auth value is all zero, which is the well-known value.
 	// So, we don't set it here.
 	// TODO(tmroeder): add support for general SRK auth values.
