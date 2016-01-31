@@ -327,6 +327,33 @@ func (g *DatalogGuard) ReloadIfModified() error {
 	return nil
 }
 
+func (g *DatalogGuard) Marshal() ([]byte, error) {
+	rules, err := proto.Marshal(&g.db)
+	if err != nil {
+		return nil, err
+	}
+	return rules, nil
+}
+
+func NewMarshalledDatalogGuard(ser []byte) (*DatalogGuard, error) {
+	var db DatalogRules
+	if err := proto.Unmarshal(ser, &db); err != nil {
+		return nil, err
+	}
+	g := NewTemporaryDatalogGuard().(*DatalogGuard)
+	for _, rule := range db.Rules {
+		r, err := auth.UnmarshalForm(rule)
+		if err != nil {
+			return nil, err
+		}
+		err = g.assert(r)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return g, nil
+}
+
 // GetSignedDatalogRules serializes and signs the datalog rules and returns
 // a SignedDatalogRules pointer.
 func (g *DatalogGuard) GetSignedDatalogRules(signer *Signer) (*SignedDatalogRules, error) {

@@ -15,6 +15,8 @@
 package tao
 
 import (
+	"fmt"
+
 	"github.com/golang/protobuf/proto"
 	"github.com/jlmucb/cloudproxy/go/tao/auth"
 )
@@ -66,12 +68,15 @@ func (t *StackedHost) GetSharedSecret(tag string, n int) (bytes []byte, err erro
 		return nil, newError("this StackedHost does not implement shared secrets")
 	}
 
-	// For now, all our key deriving with keys.DerivingKey uses a fixed 0-length salt.
-	var salt []byte
+	// TODO(tmroeder): for now, we're using a fixed zero salt and counting on
+	// the strength of HKDF with a strong key.
+	salt := make([]byte, 8)
 	material := make([]byte, n)
+	fmt.Printf("Deriving %d-byte secret with salt %02x\n", n, salt)
 	if err := t.keys.DerivingKey.Derive(salt, []byte(tag), material); err != nil {
 		return nil, err
 	}
+	fmt.Printf("Secret is %02x\n", material)
 
 	return material, nil
 }

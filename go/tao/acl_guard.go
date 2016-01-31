@@ -67,6 +67,22 @@ func (a *ACLGuard) Subprincipal() auth.SubPrin {
 	return auth.SubPrin{e}
 }
 
+func (a *ACLGuard) Marshal() ([]byte, error) {
+	ser, err := proto.Marshal(&ACLSet{Entries: a.ACL})
+	if err != nil {
+		return nil, err
+	}
+	return ser, nil
+}
+
+func NewMarshalledACLGuard(ser []byte) (*ACLGuard, error) {
+	var acls ACLSet
+	if err := proto.Unmarshal(ser, &acls); err != nil {
+		return nil, err
+	}
+	return &ACLGuard{ACL: acls.Entries}, nil
+}
+
 // GetSignedACLSet serializes and signs the ACL set and returns a SignedACLSet
 // pointer.
 func (a *ACLGuard) GetSignedACLSet(signer *Signer) (*SignedACLSet, error) {

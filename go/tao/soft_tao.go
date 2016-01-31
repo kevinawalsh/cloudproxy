@@ -16,6 +16,7 @@ package tao
 
 import (
 	"crypto/rand"
+	"fmt"
 	"io"
 
 	"github.com/golang/protobuf/proto"
@@ -93,13 +94,15 @@ func (s *SoftTao) GetSharedSecret(n int, policy string) ([]byte, error) {
 		return nil, newError("SoftTao policies not yet implemented")
 	}
 
-	// TODO(tmroeder): for now, we're using a fixed salt and counting on
+	// TODO(tmroeder): for now, we're using a fixed zero salt and counting on
 	// the strength of HKDF with a strong key.
 	salt := make([]byte, 8)
 	material := make([]byte, n)
+	fmt.Printf("Deriving %d-byte secret with salt %02x\n", n, salt)
 	if err := s.keys.DerivingKey.Derive(salt, []byte("derive shared secret"), material); err != nil {
 		return nil, err
 	}
+	fmt.Printf("Secret is %02x\n", material)
 
 	return material, nil
 }

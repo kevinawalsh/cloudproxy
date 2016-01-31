@@ -45,6 +45,9 @@ const (
 	SealPolicyConservative = "few"
 	SealPolicyLiberal      = "any"
 
+	PolicyTagACL     = "acl:"
+	PolicyTagDatalog = "datalog:"
+
 	AttestationSigningContext = "Tao Attestation Signing Context V1"
 )
 

@@ -16,6 +16,7 @@ package tao
 
 import (
 	"path"
+	"strings"
 	"sync"
 	"time"
 
@@ -123,7 +124,30 @@ func (lh *LinuxHost) GetSharedSecret(child HostedProgram, n int, policy string) 
 		// running on a similar LinuxHost instance.
 		tag = policy
 	default:
-		return nil, newError("policy not supported for GetSharedSecret: " + policy)
+		var guard Guard
+		var err error
+		if strings.HasPrefix(policy, PolicyTagACL) {
+			// Unserialize the acl guard and use that policy
+			ser := []byte(policy[len(PolicyTagACL):])
+			guard, err = NewMarshalledACLGuard(ser)
+			if err != nil {
+				return nil, newError("failed to unmarshal ACL policy in GetSharedSecret")
+			}
+		} else if strings.HasPrefix(policy, PolicyTagDatalog) {
+			ser := []byte(policy[len(PolicyTagDatalog):])
+			guard, err = NewMarshalledDatalogGuard(ser)
+			if err != nil {
+				return nil, newError("failed to unmarshal Datalog policy in GetSharedSecret")
+			}
+		} else {
+			return nil, newError("policy not supported for GetSharedSecret: " + policy)
+		}
+		prin := lh.GetTaoName(child)
+		// TODO(kwalsh) support named secrets
+		if !guard.IsAuthorized(prin, "GetSharedSecret", nil) {
+			return nil, newError("denied")
+		}
+		tag = policy
 	}
 	return lh.Host.GetSharedSecret(tag, n)
 }
@@ -137,14 +161,14 @@ func (lh *LinuxHost) Seal(child HostedProgram, data []byte, policy string) ([]by
 	}
 
 	switch policy {
-	case SharedSecretPolicyDefault, SharedSecretPolicyConservative:
+	case SealPolicyDefault, SealPolicyConservative:
 		// We are using a master key-deriving key shared among all
 		// similar LinuxHost instances. For LinuxHost, the default
 		// and conservative policies means any process running the same
 		// program binary as the caller hosted on a similar
 		// LinuxHost.
 		lhsb.PolicyInfo = proto.String(child.Subprin().String())
-	case SharedSecretPolicyLiberal:
+	case SealPolicyLiberal:
 		// The most liberal we can do is allow any hosted process
 		// running on a similar LinuxHost instance. So, we don't set
 		// any policy info.
@@ -182,11 +206,11 @@ func (lh *LinuxHost) Unseal(child HostedProgram, sealed []byte) ([]byte, string,
 
 	policy := *lhsb.Policy
 	switch policy {
-	case SharedSecretPolicyConservative, SharedSecretPolicyDefault:
+	case SealPolicyConservative, SealPolicyDefault:
 		if lhsb.PolicyInfo == nil || child.Subprin().String() != *lhsb.PolicyInfo {
 			return nil, "", newError("principal not authorized for unseal")
 		}
-	case SharedSecretPolicyLiberal:
+	case SealPolicyLiberal:
 		// Allow all
 		break
 	default:
