@@ -73,7 +73,9 @@ type Tao interface {
 	Rand() io.Reader
 
 	// GetSharedSecret returns a slice of n secret bytes.
-	GetSharedSecret(n int, policy string) (bytes []byte, err error)
+	// TODO(kwalsh) policy should really be a guard, but we still want to
+	// support the "self" policy, and we don't yet have a guard for that.
+	GetSharedSecret(n int, policy interface{}) (bytes []byte, err error)
 
 	// Attest requests the Tao host sign a statement on behalf of the caller. The
 	// optional issuer, time and expiration will be given default values if nil.

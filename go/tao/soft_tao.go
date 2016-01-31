@@ -89,7 +89,7 @@ func (s *SoftTao) Rand() io.Reader {
 }
 
 // GetSharedSecret returns a slice of n secret bytes.
-func (s *SoftTao) GetSharedSecret(n int, policy string) ([]byte, error) {
+func (s *SoftTao) GetSharedSecret(n int, policy interface{}) ([]byte, error) {
 	if policy != SharedSecretPolicyDefault {
 		return nil, newError("SoftTao policies not yet implemented")
 	}

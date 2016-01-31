@@ -174,11 +174,30 @@ func (t *RPC) GetRandomBytes(n int) ([]byte, error) {
 }
 
 // GetSharedSecret implements part of the Tao interface.
-func (t *RPC) GetSharedSecret(n int, policy string) ([]byte, error) {
+func (t *RPC) GetSharedSecret(n int, policy interface{}) ([]byte, error) {
 	if n > math.MaxUint32 {
 		return nil, newError("taorpc: request for too many secret bytes")
 	}
-	r := &RPCRequest{Size: proto.Int32(int32(n)), Policy: proto.String(policy)}
+	var policystr string
+	switch policy := policy.(type) {
+	case *ACLGuard:
+		b, err := policy.Marshal()
+		if err != nil {
+			return nil, err
+		}
+		policystr = PolicyTagACL + string(b)
+	case *DatalogGuard:
+		b, err := policy.Marshal()
+		if err != nil {
+			return nil, err
+		}
+		policystr = PolicyTagACL + string(b)
+	case string:
+		policystr = policy
+	default:
+		return nil, newError("taorpc: unrecognized policy type")
+	}
+	r := &RPCRequest{Size: proto.Int32(int32(n)), Policy: proto.String(policystr)}
 	bytes, _, err := t.call(t.serviceName+".GetSharedSecret", r, wantData)
 	return bytes, err
 }
