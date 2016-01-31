@@ -338,6 +338,19 @@ func (t SubPrin) Identical(other SubPrin) bool {
 	return true
 }
 
+// PrefixOf checks if one SubPrin is identical to, or a prefix of, another.
+func (t SubPrin) PrefixOf(other SubPrin) bool {
+	if len(t) > len(other) {
+		return false
+	}
+	for i, e := range t {
+		if !e.Identical(other[i]) {
+			return false
+		}
+	}
+	return true
+}
+
 // SubprinOrIdentical checks whether child is a subprincipal of parent or is
 // identical to parent.
 func SubprinOrIdentical(child, parent Term) bool {

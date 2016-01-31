@@ -306,7 +306,7 @@ func (lh *LinuxHost) WaitHostedProgram(pid int, subprin auth.SubPrin) (int, erro
 	lh.hpm.Lock()
 	var p HostedProgram
 	for _, lph := range lh.hostedPrograms {
-		if lph.Pid() == pid && lph.Subprin().Identical(subprin) {
+		if lph.Pid() == pid && subprin.PrefixOf(lph.Subprin()) {
 			p = lph
 			break
 		}
