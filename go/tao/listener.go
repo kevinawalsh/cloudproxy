@@ -22,6 +22,7 @@ import (
 
 	"github.com/jlmucb/cloudproxy/go/tao/auth"
 	"github.com/jlmucb/cloudproxy/go/util"
+	"github.com/kevinawalsh/profiling"
 )
 
 // ConnAuth controls authentication and authorization options for connections.
@@ -76,6 +77,8 @@ type Conn struct {
 
 	//util.MessageFraming
 	util.FramedStream
+
+	T *profiling.Trace
 }
 
 /*
@@ -115,13 +118,22 @@ func (conn *Conn) Handshake() error {
 	// 3'. Server -> Client: "anonymous"
 	// 4'. Client: checks if policy allows anonymous connections
 	if !conn.handshakeComplete {
+		if conn.T != nil {
+			conn.T.Start()
+		}
 		// Use a new framing stream on the underlying tls to avoid recursing.
 		ms := util.NewMessageStream(conn.Conn)
 		if conn.isServer {
 			conn.sendCredentials(ms)
+			if conn.T != nil {
+				conn.T.Sample("sent tao creds")
+			}
 			conn.recvCredentials(ms)
 		} else {
 			conn.sendCredentials(ms)
+			if conn.T != nil {
+				conn.T.Sample("sent tao creds")
+			}
 			conn.recvCredentials(ms)
 		}
 		conn.handshakeComplete = true
@@ -129,6 +141,9 @@ func (conn *Conn) Handshake() error {
 		if conn.handshakeErr != nil {
 			conn.Close()
 			conn.SetErr(conn.handshakeErr)
+		}
+		if conn.T != nil {
+			conn.T.Sample("done tao handshake")
 		}
 	}
 	return conn.handshakeErr
