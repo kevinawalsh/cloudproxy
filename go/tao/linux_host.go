@@ -50,10 +50,8 @@ func NewStackedLinuxHost(path string, guard Guard, hostTao Tao, childFactory map
 		childFactory: childFactory,
 	}
 
-	if _, ok := hostTao.(*SoftTao); ok {
-		if err := hostTao.ExtendTaoName(guard.Subprincipal()); err != nil {
-			return nil, err
-		}
+	if err := hostTao.ExtendTaoName(guard.Subprincipal()); err != nil {
+		return nil, err
 	}
 
 	k, err := NewOnDiskTaoSealedKeys(Signing|Crypting|Deriving, nil, hostTao, path, SealPolicyDefault)
@@ -81,10 +79,13 @@ func NewRootLinuxHost(path string, guard Guard, password []byte, childFactory ma
 		return nil, err
 	}
 
-	lh.Host, err = NewTaoRootHostFromKeys(k)
+	rootHost, err := NewTaoRootHostFromKeys(k)
 	if err != nil {
 		return nil, err
 	}
+	rootHost.taoHostName = rootHost.taoHostName.MakeSubprincipal(guard.Subprincipal())
+
+	lh.Host = rootHost
 
 	return lh, nil
 }
