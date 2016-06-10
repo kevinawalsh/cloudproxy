@@ -452,3 +452,8 @@ func MakePrinExt(name string, arg ...interface{}) PrinExt {
 func NewKeyPrin(material []byte) Prin {
 	return Prin{Type: "key", Key: Bytes(material)}
 }
+
+// NewTpmPrin returns a new Prin of type "tpm" with the given (aik) key material.
+func NewTPMPrin(material []byte) Prin {
+	return Prin{Type: "tpm", Key: Bytes(material)}
+}
