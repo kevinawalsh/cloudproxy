@@ -89,7 +89,7 @@ func handleRequest(conn net.Conn, policyKey *tao.Keys, guard tao.Guard) error {
 	}
 	subjectname := tao.NewX509Name(details)
 	SerialNumber = SerialNumber + 1
-	verifier, err := tao.FromPrincipal(kprin)
+	verifier, err := &tao.Verifier{}, errors.New("not implemented") // tao.FromPrincipal(kprin)
 	if err != nil {
 		return errors.New("can't get principal from kprin")
 	}

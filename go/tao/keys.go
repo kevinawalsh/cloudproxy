@@ -396,40 +396,39 @@ func (v *Verifier) Verify(data []byte, context string, sig []byte) (bool, error)
 }
 
 // ToPrincipal produces a "key" type Prin for this verifier. This contains a
-// serialized CryptoKey for this key.
+// hash of a serialized CryptoKey for this key.
 func (v *Verifier) ToPrincipal() auth.Prin {
+	return auth.NewKeyPrin(v.MarshalKey())
+}
+
+// MarshalKey serializes a Verifier.
+func (v *Verifier) MarshalKey() []byte {
 	ck := MarshalVerifierProto(v)
 
 	// proto.Marshal won't fail here since we fill all required fields of the
 	// message. Propagating impossible errors just leads to clutter later.
 	data, _ := proto.Marshal(ck)
 
-	return auth.NewKeyPrin(data)
+	return data
 }
 
+// PublicKey returns the internal cryptographic public key for a Verifier.
 func (v *Verifier) PublicKey() interface{} {
 	return v.ec
 }
 
-// FromPrincipal deserializes a Verifier from a Prin.
-func FromPrincipal(prin auth.Prin) (*Verifier, error) {
-	if prin.Type != "key" {
-		return nil, newError("invalid key principal")
-	}
-	var b auth.Bytes
-	if ptr, ok := prin.Key.(*auth.Bytes); ok {
-		b = *ptr
-	} else if val, ok := prin.Key.(auth.Bytes); ok {
-		b = val
-	} else {
-		return nil, newError("invalid key material")
-	}
-
+// UnmarshalKey deserializes a Verifier.
+func UnmarshalKey(material []byte) (*Verifier, error) {
 	var ck CryptoKey
-	if err := proto.Unmarshal(b, &ck); err != nil {
+	if err := proto.Unmarshal(material, &ck); err != nil {
 		return nil, err
 	}
 	return UnmarshalVerifierProto(&ck)
+}
+
+// SignsForPrincipal returns true when prin is (or is a subprincipal of) this verifier key.
+func (v *Verifier) SignsForPrincipal(prin auth.Prin) bool {
+	return auth.SubprinOrIdentical(prin, v.ToPrincipal())
 }
 
 // FromX509 creates a Verifier from an X509 certificate.

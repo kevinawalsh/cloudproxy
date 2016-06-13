@@ -178,9 +178,9 @@ func (sp *subprinPrim) Search(target *datalog.Literal, discovered func(c *datalo
 		}
 		extIndex := len(prin.Ext) - 1
 		trimmedPrin := auth.Prin{
-			Type: prin.Type,
-			Key:  prin.Key,
-			Ext:  prin.Ext[:extIndex],
+			Type:    prin.Type,
+			KeyHash: prin.KeyHash,
+			Ext:     prin.Ext[:extIndex],
 		}
 		extPrin := auth.PrinTail{
 			Ext: []auth.PrinExt{prin.Ext[extIndex]},
@@ -469,7 +469,7 @@ func checkTermVarUsage(vars []string, unusedVars *[]string, e ...auth.Term) erro
 			}
 			setRemove(unusedVars, e.String())
 		case auth.Prin:
-			err := checkTermVarUsage(vars, unusedVars, e.Key)
+			err := checkTermVarUsage(vars, unusedVars, e.KeyHash)
 			if err != nil {
 				return err
 			}
@@ -480,7 +480,7 @@ func checkTermVarUsage(vars []string, unusedVars *[]string, e ...auth.Term) erro
 				}
 			}
 		case *auth.Prin:
-			err := checkTermVarUsage(vars, unusedVars, e.Key)
+			err := checkTermVarUsage(vars, unusedVars, e.KeyHash)
 			if err != nil {
 				return err
 			}

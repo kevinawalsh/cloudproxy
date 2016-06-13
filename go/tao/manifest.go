@@ -15,7 +15,6 @@
 package tao
 
 import (
-	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
@@ -176,14 +175,11 @@ func DeriveManifest(p *auth.Prin) Manifest {
 			}
 
 			aik := Manifest{}
-			k, err := ExtractAIK(*p)
-			if err != nil {
+			kh, ok := p.KeyHash.(auth.Bytes)
+			if !ok {
 				aik["Status"] = "Unknown"
 			} else {
-				aik["Type"] = "RSA"
-				aik["Size"] = k.N.BitLen()
-				aik["Exponent"] = k.E
-				aik["Modulus"] = k.N.Bytes()
+				aik["KeyHash"] = kh
 			}
 			m["Type"] = "Trusted Platform Module"
 			m["TPM"] = Manifest{
@@ -193,17 +189,11 @@ func DeriveManifest(p *auth.Prin) Manifest {
 
 		} else if p.Type == "key" {
 			key := Manifest{}
-			v, err := FromPrincipal(*p)
-			if err != nil {
+			kh, ok := p.KeyHash.(auth.Bytes)
+			if !ok {
 				key["Status"] = "Unknown"
 			} else {
-				switch v := v.PublicKey().(type) {
-				case *ecdsa.PublicKey:
-					key["Algorithm"] = "ECDSA"
-					key["Curve"] = ecdsaCurveName[v.Curve]
-					key["X"] = v.X.Bytes()
-					key["Y"] = v.Y.Bytes()
-				}
+				key["KeyHash"] = kh
 			}
 			m["Type"] = "Public Key Principal"
 			m["Key"] = key
