@@ -1,3 +1,13 @@
+This directory contains a fork of the source code and design material for the 
+CloudProxy Project, modified to support experiments for the following paper:
+
+    TLS with Trustworthy Certificate Authorities. Kevin Walsh.
+    In IEEE Workshop on Security and Privacy in the Cloud, October 2016.
+
+The original README is below.
+
+---
+
 This directory contains the source code and design material for the 
 CloudProxy Project.
 
