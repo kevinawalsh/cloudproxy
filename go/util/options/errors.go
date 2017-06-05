@@ -28,6 +28,13 @@ func FailIf(err error, msg string, args ...interface{}) {
 	}
 }
 
+// FailWhen does the same thing as Fail, but only if condition is true.
+func FailWhen(condition bool, msg string, args ...interface{}) {
+	if condition {
+		Fail(nil, msg, args...)
+	}
+}
+
 // WarnIf prints an error and accompanying message, but only if err is not nil.
 func WarnIf(err error, msg string, args ...interface{}) {
 	if err != nil {
