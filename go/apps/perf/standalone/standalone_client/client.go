@@ -15,56 +15,53 @@
 package main
 
 import (
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
-	// "crypto/tls"
 	"flag"
 	"fmt"
 	"net"
 
 	"github.com/jlmucb/cloudproxy/go/util/options"
 	"github.com/jlmucb/cloudproxy/go/util/verbose"
+
+	"github.com/kevinawalsh/profiling"
 )
 
-var host = flag.String("host", "0.0.0.0", "server host")
+var host = flag.String("host", "localhost", "server host")
 var port = flag.String("port", "8123", "server port")
-var count = flag.Int("n", 1, "Number of trials, negative for indefinite")
+var count = flag.Int("n", 1, "Number of trials")
 
 func main() {
 	flag.Parse()
 
-	// generate ecdsa key pair
-	// ec
-	_, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	options.FailIf(err, "can't generate key pair")
+	T := profiling.NewTrace(2, *count)
 
-	// generate self-signed certificate
+	for i := 0; i < *count; i++ {
 
-	// listen
-	addr := net.JoinHostPort(*host, *port)
-	sock, err := net.Listen("tcp", addr)
-	options.FailIf(err, "error listening at %s", addr)
-	defer sock.Close()
-	fmt.Printf("listening at %s.\n", addr)
+		T.Start()
 
-	for i := 0; i < *count || *count < 0; i++ { // negative means forever
-		// accept connection
-		conn, err := sock.Accept()
-		options.FailIf(err, "error accepting connection")
+		// open tcp connection
+		addr := net.JoinHostPort(*host, *port)
+		conn, err := net.Dial("tcp", addr)
+		options.FailIf(err, "error connecting to %s", addr)
+		defer conn.Close()
+		T.Sample("connect")
 
-		// recv ping
+		// send ping
 		buf := []byte{1}
-		_, err = conn.Read(buf)
-		options.FailIf(err, "can't read")
-		buf[0]++
-
-		// send pong
 		_, err = conn.Write(buf)
 		options.FailIf(err, "can't write")
 
-		conn.Close()
+		// recv pong
+		n, err := conn.Read(buf)
+		options.FailWhen(n != 1, "bad pong: len=%d\n", n)
+		options.FailWhen(buf[0] != 2, "bad pong: %d\n", buf[0])
+		T.Sample("rtt")
 
-		verbose.Printf("done one")
+		// close tls connection
+		err = conn.Close()
+		options.FailIf(err, "can't close")
+
+		verbose.Printf("done one\n")
 	}
+
+	fmt.Println(T)
 }
