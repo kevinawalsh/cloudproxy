@@ -15,6 +15,9 @@
 package main
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -22,6 +25,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/jlmucb/cloudproxy/go/tao"
 	"github.com/jlmucb/cloudproxy/go/util/options"
 	"github.com/jlmucb/cloudproxy/go/util/verbose"
@@ -51,11 +55,21 @@ var name = &pkix.Name{
 func main() {
 	flag.Parse()
 
-	T := profiling.NewTrace(4, *count)
+	T := profiling.NewTrace(6, *count)
 
 	for i := 0; i < *count; i++ {
 
 		T.Start()
+
+		_, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		options.FailIf(err, "error generating extra key")
+		_, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		options.FailIf(err, "error generating extra key")
+		_, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		options.FailIf(err, "error generating extra key")
+		_, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		options.FailIf(err, "error generating extra key")
+		T.Sample("extrakey")
 
 		// generate ecdsa key pair
 		keys := generateKeysAndCertify(name, T)
@@ -96,13 +110,17 @@ func generateKeysAndCertify(name *pkix.Name, T *profiling.Trace) *tao.Keys {
 	T.Sample("genkey")
 
 	csr := taoca.NewCertificateSigningRequest(keys.VerifyingKey, name)
+	scsr, err := proto.Marshal(csr)
+	options.FailIf(err, "error serializing csr")
+	sig, err := keys.SigningKey.Sign(scsr, "csr")
 	caaddr := net.JoinHostPort(*cahost, *caport)
 	conn, err := net.Dial("tcp", caaddr)
 	options.FailIf(err, "error connecting to ca %s", caaddr)
 	defer conn.Close()
+	T.Sample("gencsr")
 
 	ms := util.NewMessageStream(conn)
-	req := &taoca.Request{CSR: csr}
+	req := &taoca.Request{CSR: csr, Signature: sig}
 	_, err = ms.WriteMessage(req)
 	options.FailIf(err, "error writing message")
 

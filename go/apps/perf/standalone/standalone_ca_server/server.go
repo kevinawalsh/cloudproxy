@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/jlmucb/cloudproxy/go/tao"
 	"github.com/jlmucb/cloudproxy/go/util"
 	"github.com/jlmucb/cloudproxy/go/util/options"
@@ -88,13 +89,16 @@ func generateKeysAndCertify(name *pkix.Name) *tao.Keys {
 	options.FailIf(err, "can't generate key")
 
 	csr := taoca.NewCertificateSigningRequest(keys.VerifyingKey, name)
+	scsr, err := proto.Marshal(csr)
+	options.FailIf(err, "error serializing csr")
+	sig, err := keys.SigningKey.Sign(scsr, "csr")
 	caaddr := net.JoinHostPort(*cahost, *caport)
 	conn, err := net.Dial("tcp", caaddr)
 	options.FailIf(err, "error connecting to ca %s", caaddr)
 	defer conn.Close()
 
 	ms := util.NewMessageStream(conn)
-	req := &taoca.Request{CSR: csr}
+	req := &taoca.Request{CSR: csr, Signature: sig}
 	_, err = ms.WriteMessage(req)
 	options.FailIf(err, "error writing message")
 

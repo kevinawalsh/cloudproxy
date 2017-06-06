@@ -17,6 +17,7 @@
 //
 // Requests:
 //   CSR <name, is_ca, expiration, etc.>
+//   Signature
 // Responses:
 //   OK <x509cert>
 //   ERROR <msg>
@@ -233,6 +234,22 @@ func doResponse(conn util.MessageStream) (bool, *profiling.Trace) {
 		doError(conn, err, taoca.ResponseStatus_TAOCA_BAD_REQUEST, "can't unmarshal key")
 		return false, T
 	}
+	// check signature on CSR
+	scsr, err := proto.Marshal(req.CSR)
+	if err != nil {
+		doError(conn, err, taoca.ResponseStatus_TAOCA_BAD_REQUEST, "can't marshal csr")
+		return false, T
+	}
+	ok, err := subjectKey.Verify(scsr, "csr", req.Signature)
+	if err != nil {
+		doError(conn, err, taoca.ResponseStatus_TAOCA_BAD_REQUEST, "can't verify csr signature")
+		return false, T
+	}
+	if !ok {
+		doError(conn, nil, taoca.ResponseStatus_TAOCA_BAD_REQUEST, "csr signature mismatch")
+		return false, T
+	}
+
 	T.Sample("got subject") // 4
 
 	// TODO(kwalsh) more robust generation of serial numbers?

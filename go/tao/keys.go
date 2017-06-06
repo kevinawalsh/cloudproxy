@@ -943,17 +943,19 @@ func NewTemporaryNamedKeys(keyTypes KeyType, name *pkix.Name) (*Keys, error) {
 
 		k.VerifyingKey = k.SigningKey.GetVerifier()
 
-		if name == nil {
-			name = DefaultEphemeralX509Name
-		}
-		template := k.SigningKey.X509Template(name)
-		template.IsCA = true
-		cert, err := k.SigningKey.CreateSelfSignedX509(template)
-		if err != nil {
-			return nil, err
-		}
-		k.Cert["self"] = cert
-		k.Cert["default"] = cert
+		/*
+			if name == nil {
+				name = DefaultEphemeralX509Name
+			}
+			template := k.SigningKey.X509Template(name)
+			template.IsCA = true
+			cert, err := k.SigningKey.CreateSelfSignedX509(template)
+			if err != nil {
+				return nil, err
+			}
+			k.Cert["self"] = cert
+			k.Cert["default"] = cert
+		*/
 	}
 
 	if k.keyTypes&Crypting == Crypting {
