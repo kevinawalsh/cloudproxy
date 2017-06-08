@@ -15,6 +15,7 @@
 package tao
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/golang/protobuf/proto"
@@ -109,9 +110,10 @@ func (a *Attestation) Validate() (auth.Says, error) {
 	} else {
 		// Case (2), delegation present.
 		// Require that:
-		// - delegation conveys delegator says delegate speaksfor delegator,
-		// - a.signer speaks for delegate
-		// - and delegator speaks for s.Speaker
+		// - delegation conveys prin says delegate speaksfor delegator,
+		// - prin is identical to or a parent of (hence speaks for) delegator
+		// - a.signer is identical to or a parent of (hence speaks for) delegate
+		// - delegator is identical to or a parent of (hence speaks for) s.Speaker
 		var da Attestation
 		if err := proto.Unmarshal(a.SerializedDelegation, &da); err != nil {
 			return auth.Says{}, err
@@ -128,7 +130,7 @@ func (a *Attestation) Validate() (auth.Says, error) {
 		} else {
 			return auth.Says{}, newError("tao: attestation delegation is wrong type")
 		}
-		if !delegationStatement.Speaker.Identical(delegation.Delegator) {
+		if !auth.SubprinOrIdentical(delegation.Delegator, delegationStatement.Speaker) {
 			return auth.Says{}, newError("tao: attestation delegation is invalid")
 		}
 		if !auth.SubprinOrIdentical(delegation.Delegate, signer) {
@@ -184,4 +186,49 @@ func GenerateAttestation(s *Signer, delegation []byte, stmt auth.Says) (*Attesta
 	}
 
 	return a, nil
+}
+
+// ValidateDelegation ensures an attestation is both valid and conveys "speaker
+// says delegate speaksfor delegator", where speaker is identical to or a parent
+// of (hence speaks for) delegator, and if so, returns the delegation.
+func (a *Attestation) ValidateDelegation() (*auth.Speaksfor, error) {
+	delegationStatement, err := a.Validate()
+	if err != nil {
+		return nil, err
+	}
+	var delegation *auth.Speaksfor
+	if ptr, ok := delegationStatement.Message.(*auth.Speaksfor); ok {
+		delegation = ptr
+	} else if val, ok := delegationStatement.Message.(auth.Speaksfor); ok {
+		delegation = &val
+	} else {
+		return nil, newError("tao: delegation is wrong type")
+	}
+	if !auth.SubprinOrIdentical(delegation.Delegator, delegationStatement.Speaker) {
+		return nil, newError("tao: delegation is invalid")
+	}
+	return delegation, nil
+}
+
+// ValidateDelegationFrom performs the same checks as ValidateDelegation, but
+// also ensures that the given principal is identical to or a parent of (hence speaks for)
+// the delegate, and if so, returns delegator.
+func (a *Attestation) ValidateDelegationFrom(prin auth.Prin) (auth.Prin, error) {
+	delegation, err := a.ValidateDelegation()
+	if err != nil {
+		return auth.Prin{}, err
+	}
+	if !auth.SubprinOrIdentical(delegation.Delegate, prin) {
+		a2, _ := a.Validate()
+		fmt.Printf("  stmt: %s\n", a2)
+		fmt.Printf("  prin: %s\n  dele: %s\n", prin, delegation.Delegate)
+		return auth.Prin{}, newError("tao: delegation from wrong principal")
+	}
+	if delegator, ok := delegation.Delegator.(*auth.Prin); ok {
+		return *delegator, nil
+	} else if delegator, ok := delegation.Delegator.(auth.Prin); ok {
+		return delegator, nil
+	} else {
+		return auth.Prin{}, newError("tao: delegation to non-principal")
+	}
 }

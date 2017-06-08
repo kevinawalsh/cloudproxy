@@ -17,6 +17,7 @@ package tao
 import (
 	"crypto/rand"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/jlmucb/cloudproxy/go/tao/auth"
 )
 
@@ -24,6 +25,7 @@ import (
 type RootHost struct {
 	keys        *Keys
 	taoHostName auth.Prin
+	taoSignName auth.Prin
 }
 
 // NewTaoRootHostFromKeys returns a RootHost that uses these keys.
@@ -32,9 +34,19 @@ func NewTaoRootHostFromKeys(k *Keys) (*RootHost, error) {
 		return nil, newError("missing required key for RootHost")
 	}
 
+	p := k.SigningKey.ToPrincipal()
+	s := p
+	var err error
+	if k.Delegation != nil {
+		s, err = k.Delegation.ValidateDelegationFrom(k.SigningKey.ToPrincipal())
+		if err != nil {
+			return nil, err
+		}
+	}
 	t := &RootHost{
 		keys:        k,
-		taoHostName: k.SigningKey.ToPrincipal(),
+		taoHostName: p,
+		taoSignName: s,
 	}
 
 	return t, nil
@@ -96,7 +108,25 @@ func (t *RootHost) Attest(childSubprin auth.SubPrin, issuer *auth.Prin,
 }
 
 func (t *RootHost) Say(stmt auth.Says) (*Attestation, error) {
-	return GenerateAttestation(t.keys.SigningKey, nil /* delegation */, stmt)
+	var d []byte
+	if t.keys.Delegation != nil {
+		var err error
+		d, err = proto.Marshal(t.keys.Delegation)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return GenerateAttestation(t.keys.SigningKey, d, stmt)
+}
+
+func (t *RootHost) SetDelegation(delegation *Attestation) (err error) {
+	delegator, err := delegation.ValidateDelegationFrom(t.taoHostName)
+	if err != nil {
+		return err
+	}
+	t.taoSignName = delegator
+	t.keys.Delegation = delegation
+	return nil
 }
 
 // Encrypt data so that only this host can access it.
@@ -126,4 +156,11 @@ func (t *RootHost) RemovedHostedProgram(childSubprin auth.SubPrin) error {
 // Tao hosts, to this hosted Tao host.
 func (t *RootHost) HostName() auth.Prin {
 	return t.taoHostName
+}
+
+// SignName gets the Tao principal name this hosted Tao host uses for signing.
+// This will either the same as HostName(), or it will be extracted from the
+// delegation set previously.
+func (t *RootHost) SignName() auth.Prin {
+	return t.taoSignName
 }

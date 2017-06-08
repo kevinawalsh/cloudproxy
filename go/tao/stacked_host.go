@@ -24,6 +24,7 @@ import (
 // A StackedHost implements Host over an existing host Tao.
 type StackedHost struct {
 	taoHostName auth.Prin
+	taoSignName auth.Prin
 	hostTao     Tao
 	keys        *Keys
 }
@@ -35,10 +36,17 @@ func NewTaoStackedHostFromKeys(k *Keys, t Tao) (Host, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	s := n
+	if k.Delegation != nil {
+		s, err = k.Delegation.ValidateDelegationFrom(k.SigningKey.ToPrincipal())
+		if err != nil {
+			return nil, err
+		}
+	}
 	tsh := &StackedHost{
 		keys:        k,
 		taoHostName: n,
+		taoSignName: s,
 		hostTao:     t,
 	}
 
@@ -116,6 +124,16 @@ func (t *StackedHost) Say(stmt auth.Says) (*Attestation, error) {
 	return GenerateAttestation(t.keys.SigningKey, d, stmt)
 }
 
+func (t *StackedHost) SetDelegation(delegation *Attestation) (err error) {
+	delegator, err := delegation.ValidateDelegationFrom(t.taoHostName)
+	if err != nil {
+		return err
+	}
+	t.taoSignName = delegator
+	t.keys.Delegation = delegation
+	return nil
+}
+
 // Encrypt data so that only this host can access it.
 func (t *StackedHost) Encrypt(data []byte) (encrypted []byte, err error) {
 	if t.keys == nil || t.keys.CryptingKey == nil {
@@ -165,4 +183,11 @@ func (t *StackedHost) RemovedHostedProgram(childSubprin auth.SubPrin) error {
 // Tao hosts, to this hosted Tao host.
 func (t *StackedHost) HostName() auth.Prin {
 	return t.taoHostName
+}
+
+// SignName gets the Tao principal name this hosted Tao host uses for signing.
+// This will either the same as HostName(), or it will be extracted from the
+// delegation set previously.
+func (t *StackedHost) SignName() auth.Prin {
+	return t.taoSignName
 }

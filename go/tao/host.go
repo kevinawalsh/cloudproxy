@@ -46,6 +46,9 @@ type Host interface {
 	// Say generates an attestation on behalf of the host.
 	Say(stmt auth.Says) (*Attestation, error)
 
+	// SetDelegation causes future attestations to have the given delegation.
+	SetDelegation(delegation *Attestation) error
+
 	// Encrypt data so that only this host can access it.
 	Encrypt(data []byte) (encrypted []byte, err error)
 
@@ -58,8 +61,13 @@ type Host interface {
 	// Notify this Host that a hosted program has been killed.
 	RemovedHostedProgram(childSubprin auth.SubPrin) error
 
-	// Get the Tao principal name assigned to this hosted Tao host. The
-	// name encodes the full path from the root Tao, through all
-	// intermediary Tao hosts, to this hosted Tao host.
+	// HostName get the Tao principal name assigned to this hosted Tao host. The
+	// name encodes the full path from the root Tao, through all intermediary
+	// Tao hosts, to this hosted Tao host.
 	HostName() auth.Prin
+
+	// SignName gets the Tao principal name this hosted Tao host uses for
+	// signing. This will either the same as HostName(), or it will be extracted
+	// from the delegation set previously.
+	SignName() auth.Prin
 }

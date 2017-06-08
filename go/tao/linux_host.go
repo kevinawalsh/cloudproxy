@@ -363,6 +363,11 @@ func (lh *LinuxHost) HostName() auth.Prin {
 	return lh.Host.HostName()
 }
 
+// SignName returns the name of the Host used for signing by the LinuxHost.
+func (lh *LinuxHost) SignName() auth.Prin {
+	return lh.Host.SignName()
+}
+
 // Shutdown stops all hosted programs. If any remain after 10 seconds, they are
 // killed. Cleans up factories and temp directories.
 func (lh *LinuxHost) Shutdown() error {

@@ -55,6 +55,7 @@ var opts = []options.Option{
 	//    sh$ setsid tao host start ... </dev/null >/dev/null 2>&1
 	//    sh$ setsid linux_host start ... </dev/null >/dev/null 2>&1
 	{"daemon", false, "", "Detach from tty, close stdio, and run as a daemon", "start"},
+	{"delegation", "", "<file>", "Delegation for keys from an attestation authority", "start"},
 
 	// Flags for root
 	{"pass", "", "<password>", "Host password for root hosts (for testing only!)", "root"},
@@ -293,6 +294,7 @@ func loadHost(domain *tao.Domain, cfg *tao.LinuxHostConfig) (*tao.LinuxHost, err
 		// }
 		// sshKeysCfg, err := io.ReadFile(sshFile)
 		// options.FailIf(err, "Can't read ssh authorized keys")
+		// ... }
 
 		coreOSImage := cfg.GetKvmCoreosImg()
 		if coreOSImage == "" {
@@ -444,6 +446,17 @@ func startHost(domain *tao.Domain) {
 	host, err := loadHost(domain, cfg)
 	options.FailIf(err, "Can't create host")
 
+	if *options.String["delegation"] != "" {
+		// dPath := path.Join(hostPath(), *options.String["delegation"])
+		dPath := *options.String["delegation"]
+		buf, err := ioutil.ReadFile(dPath)
+		options.FailIf(err, "Can't read delegation: %s", dPath)
+		var delegation tao.Attestation
+		err = proto.Unmarshal(buf, &delegation)
+		options.FailIf(err, "Can't unmarshal delegation: %s", dPath)
+		host.Host.SetDelegation(&delegation)
+	}
+
 	sockPath := path.Join(hostPath(), "admin_socket")
 	// Set the socketPath directory go+rx so tao_launch can access sockPath and
 	// connect to this linux host, even when tao_launch is run as non-root.
@@ -461,7 +474,7 @@ func startHost(domain *tao.Domain) {
 	}
 
 	go func() {
-		verbose.Printf("Linux Tao Service (%s) started and waiting for requests\n", host.HostName())
+		verbose.Printf("Linux Tao Service started and waiting for requests\n  HostName: %s\n  SignName: %s\n", host.HostName(), host.SignName())
 		err = tao.NewLinuxHostAdminServer(host).Serve(sock)
 		verbose.Printf("Linux Tao Service finished\n")
 		sock.Close()
