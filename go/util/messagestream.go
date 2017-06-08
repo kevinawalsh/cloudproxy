@@ -18,6 +18,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"net"
 
 	"github.com/golang/protobuf/proto"
 )
@@ -124,6 +125,8 @@ func ReadInt(ms MessageStream) (int, error) {
 	_, err = io.ReadFull(ms, b[:])
 	if err == io.EOF {
 		return 0, err
+	} else if neterr, ok := err.(*net.OpError); ok && neterr.Err == io.EOF {
+		return 0, err
 	} else if err != nil {
 		return 0, Logged(err)
 	}
@@ -171,6 +174,8 @@ func ReadString(ms MessageStream) (string, error) {
 	}()
 	n, err := ReadInt(ms)
 	if err == io.EOF {
+		return "", err
+	} else if neterr, ok := err.(*net.OpError); ok && neterr.Err == io.EOF {
 		return "", err
 	} else if err != nil {
 		return "", Logged(err)
