@@ -45,4 +45,7 @@ message LinuxHostConfig {
 
   // Path to CoreOS authorized_keys for hosted KVM, absolute or relative to domain.
   optional string kvm_coreos_ssh_auth_keys = 8;
+
+  // List of "signing", "crypting", and/or "deriving"
+  repeated string keys = 9;
 }

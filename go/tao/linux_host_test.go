@@ -37,7 +37,7 @@ func testNewStackedLinuxHost() (*LinuxHost, error) {
 	}
 
 	tg := LiberalGuard
-	lh, err := NewStackedLinuxHost(tmpdir, &tg, ft, nil)
+	lh, err := NewStackedLinuxHost(tmpdir, Signing|Crypting|Deriving, &tg, ft, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -98,8 +98,8 @@ func TestNewStackedLinuxHostWithTao(t *testing.T) {
 
 	parentTao := ParentFromConfig(*tc)
 	tg := LiberalGuard
-	if _, err = NewStackedLinuxHost(tmpdir, &tg, parentTao, nil); err != nil {
-		t.Errorf("NewStackedLinuxHost(%q, %v, %v, nil) = %v", tmpdir, tg, parentTao, nil)
+	if _, err = NewStackedLinuxHost(tmpdir, Signing|Crypting|Deriving, &tg, parentTao, nil); err != nil {
+		t.Errorf("NewStackedLinuxHost(%q, %v, %v, %v, nil) = %v", tmpdir, Signing|Crypting|Deriving, tg, parentTao, nil)
 	}
 }
 

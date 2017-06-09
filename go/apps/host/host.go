@@ -63,6 +63,9 @@ var opts = []options.Option{
 	// Flags for stacked
 	{"parent_type", "", "<type>", "Type of channel to parent Tao: TPM, pipe, file, or unix", "stacked"},
 	{"parent_spec", "", "<spec>", "Spec for channel to parent Tao", "stacked"},
+	{"signing_key", true, "", "Use a signing key for attestations to avoid calling parent", "stacked"},
+	{"crypting_key", true, "", "Use a crypting key for sealing to avoid calling parent", "stacked"},
+	{"deriving_key", true, "", "Use a deriving key to avoid calling parent", "stacked"},
 
 	// Flags for QEMU/KVM CoreOS init
 	{"kvm_coreos_img", "", "<path>", "Path to CoreOS.img file, relative to domain or absolute", "kvm"},
@@ -187,6 +190,17 @@ func configureFromOptions(cfg *tao.LinuxHostConfig) {
 	if s := *options.String["kvm_coreos_ssh_auth_keys"]; s != "" {
 		cfg.KvmCoreosSshAuthKeys = proto.String(s)
 	}
+	var keys []string
+	if *options.Bool["signing_key"] {
+		keys = append(keys, "signing")
+	}
+	if *options.Bool["crypting_key"] {
+		keys = append(keys, "signing")
+	}
+	if *options.Bool["signing_key"] {
+		keys = append(keys, "signing")
+	}
+	cfg.Keys = keys
 }
 
 func configureFromFile() *tao.LinuxHostConfig {
@@ -338,14 +352,14 @@ func loadHost(domain *tao.Domain, cfg *tao.LinuxHostConfig) (*tao.LinuxHost, err
 			vmMemory = 1024
 		}
 
-		cfg := &tao.CoreOSLinuxhostConfig{
+		kvmCfg := &tao.CoreOSLinuxhostConfig{
 			ImageFile:  coreOSImage,
 			Memory:     int(vmMemory),
 			RulesPath:  rulesPath,
 			SSHKeysCfg: sshKeysCfg,
 		}
 
-		childFactory["kvm_coreos_linuxhost"], err = tao.NewLinuxKVMCoreOSHostFactory(socketPath, cfg)
+		childFactory["kvm_coreos_linuxhost"], err = tao.NewLinuxKVMCoreOSHostFactory(socketPath, kvmCfg)
 		options.FailIf(err, "Can't create KVM CoreOS LinuxHost factory")
 	}
 
@@ -357,8 +371,23 @@ func loadHost(domain *tao.Domain, cfg *tao.LinuxHostConfig) (*tao.LinuxHost, err
 		if parent == nil {
 			options.Usage("No host tao available, verify -parent_type (or $%s) and associated variables\n", tao.HostChannelTypeEnvVar)
 		}
-		return tao.NewStackedLinuxHost(hostPath(), domain.Guard, parent, childFactory)
+		keyTypes := keyTypesFromConfig(cfg)
+		return tao.NewStackedLinuxHost(hostPath(), keyTypes, domain.Guard, parent, childFactory)
 	}
+}
+
+func keyTypesFromConfig(cfg *tao.LinuxHostConfig) (keyTypes tao.KeyType) {
+	for _, s := range cfg.Keys {
+		switch s {
+		case "signing":
+			keyTypes |= tao.Signing
+		case "crypting":
+			keyTypes |= tao.Crypting
+		case "deriving":
+			keyTypes |= tao.Deriving
+		}
+	}
+	return
 }
 
 func initHost(domain *tao.Domain) {

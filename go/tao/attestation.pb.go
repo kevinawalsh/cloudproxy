@@ -159,6 +159,10 @@ type Attestation struct {
 	// self evident that signer speaks for the issuer in the serialized statement.
 	// This can be added, removed, or replaced without changing the attestation
 	// signature, but verification may fail if a required delegation is missing.
+	// Note: to support chains of delegations, e.g. following the reasoning that
+	// if A speaksfor B and B speaksfor C, then A speaksfor C, then we would need
+	// to support multiple serialized delegations. For now, when issuing
+	// delegations we just collapse the chain, e.g. issue A speaksfor C directly.
 	SerializedDelegation []byte `protobuf:"bytes,5,opt,name=serialized_delegation" json:"serialized_delegation,omitempty"`
 	// An optional set of further attestations that may pertain, in some way, to
 	// the the issuer or signer of this attestation. These can be added or removed

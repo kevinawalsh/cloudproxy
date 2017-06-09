@@ -43,7 +43,7 @@ type LinuxHost struct {
 
 // NewStackedLinuxHost creates a new LinuxHost as a hosted program of an existing
 // host Tao.
-func NewStackedLinuxHost(path string, guard Guard, hostTao Tao, childFactory map[string]HostedProgramFactory) (*LinuxHost, error) {
+func NewStackedLinuxHost(path string, keyTypes KeyType, guard Guard, hostTao Tao, childFactory map[string]HostedProgramFactory) (*LinuxHost, error) {
 	lh := &LinuxHost{
 		path:         path,
 		guard:        guard,
@@ -54,9 +54,13 @@ func NewStackedLinuxHost(path string, guard Guard, hostTao Tao, childFactory map
 		return nil, err
 	}
 
-	k, err := NewOnDiskTaoSealedKeys(Signing|Crypting|Deriving, nil, hostTao, path, SealPolicyDefault)
-	if err != nil {
-		return nil, err
+	var k *Keys
+	var err error
+	if keyTypes != 0 {
+		k, err = NewOnDiskTaoSealedKeys(keyTypes, nil, hostTao, path, SealPolicyDefault)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	lh.Host, err = NewTaoStackedHostFromKeys(k, hostTao)

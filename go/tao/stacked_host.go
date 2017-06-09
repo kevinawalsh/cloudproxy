@@ -21,7 +21,13 @@ import (
 	"github.com/jlmucb/cloudproxy/go/tao/auth"
 )
 
-// A StackedHost implements Host over an existing host Tao.
+// A StackedHost implements Host over an existing host Tao, optionally using a
+// set of keys to avoid calling the underlying host Tao in some situations.
+// If keys is nil, all calls will pass through to the underlying host Tao.
+// Otherwise:
+// - if keys has a SigningKey, it will be used for attestions.
+// - if keys has a CryptingKey, it will be used for sealing and unsealing.
+// - if keys has a DerivingKey, it will be used for deriving keys.
 type StackedHost struct {
 	taoHostName auth.Prin
 	taoSignName auth.Prin
@@ -37,7 +43,7 @@ func NewTaoStackedHostFromKeys(k *Keys, t Tao) (Host, error) {
 		return nil, err
 	}
 	s := n
-	if k.Delegation != nil {
+	if k != nil && k.Delegation != nil {
 		s, err = k.Delegation.ValidateDelegationFrom(k.SigningKey.ToPrincipal())
 		if err != nil {
 			return nil, err
@@ -53,10 +59,14 @@ func NewTaoStackedHostFromKeys(k *Keys, t Tao) (Host, error) {
 	return tsh, nil
 }
 
-// NewTaoStackedHost generates a new StackedHost with a fresh set of temporary
-// keys.
-func NewTaoStackedHost(t Tao) (Host, error) {
-	k, err := NewTemporaryKeys(Signing | Crypting)
+// NewTaoStackedHost generates a new StackedHost, optionally with a fresh set of
+// temporary keys.
+func NewTaoStackedHost(t Tao, keyTypes KeyType) (Host, error) {
+	if keyTypes == 0 {
+		return NewTaoStackedHostFromKeys(nil, t)
+	}
+
+	k, err := NewTemporaryKeys(keyTypes)
 	if err != nil {
 		return nil, err
 	}
@@ -71,9 +81,9 @@ func (t *StackedHost) GetRandomBytes(childSubprin auth.SubPrin, n int) (bytes []
 
 // GetSharedSecret returns a slice of n secret bytes.
 func (t *StackedHost) GetSharedSecret(tag string, n int) (bytes []byte, err error) {
-	// TODO(tmroeder): this should be implemented using the underlying host
-	if t.keys.DerivingKey == nil {
-		return nil, newError("this StackedHost does not implement shared secrets")
+	if t.keys == nil || t.keys.DerivingKey == nil {
+		// TODO(tmroeder): this should be implemented using the underlying host
+		return nil, newError("this StackedHost does not yet implement shared secrets")
 	}
 
 	// TODO(tmroeder): for now, we're using a fixed zero salt and counting on
@@ -112,6 +122,9 @@ func (t *StackedHost) Attest(childSubprin auth.SubPrin, issuer *auth.Prin,
 }
 
 func (t *StackedHost) Say(stmt auth.Says) (*Attestation, error) {
+	if t.keys == nil || t.keys.SigningKey == nil {
+		return nil, newError("Say is not yet implemented for keyless stacked hosts")
+	}
 	var d []byte
 	if t.keys.Delegation != nil {
 		var err error
@@ -125,7 +138,10 @@ func (t *StackedHost) Say(stmt auth.Says) (*Attestation, error) {
 }
 
 func (t *StackedHost) SetDelegation(delegation *Attestation) (err error) {
-	delegator, err := delegation.ValidateDelegationFrom(t.taoHostName)
+	if t.keys == nil || t.keys.SigningKey == nil {
+		return newError("SetDelegation requires a signing key")
+	}
+	delegator, err := delegation.ValidateDelegationFrom(t.keys.SigningKey.ToPrincipal())
 	if err != nil {
 		return err
 	}

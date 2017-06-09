@@ -42,7 +42,7 @@ func testNewTaoStackedHost(t *testing.T) Host {
 		t.Fatal("Couldn't set up a SoftTao for the StackedHost")
 	}
 
-	th, err := NewTaoStackedHost(ft)
+	th, err := NewTaoStackedHost(ft, 0)
 	if err != nil {
 		t.Fatal("Couldn't set up a StackedHost over a SoftTao")
 	}

@@ -113,7 +113,7 @@ func (a *Attestation) Validate() (auth.Says, error) {
 		// - delegation conveys prin says delegate speaksfor delegator,
 		// - prin is identical to or a parent of (hence speaks for) delegator
 		// - a.signer is identical to or a parent of (hence speaks for) delegate
-		// - delegator is identical to or a parent of (hence speaks for) s.Speaker
+		// - delegator is identical to or a parent of (hence speaks for) stmt.Speaker
 		var da Attestation
 		if err := proto.Unmarshal(a.SerializedDelegation, &da); err != nil {
 			return auth.Says{}, err
