@@ -38,6 +38,7 @@ import (
 var opts = []options.Option{
 	{"keys", "", "<dir>", "Directory for storing keys and associated certificates", "all"},
 	{"attestation", "", "<file>", "File for storing signed tpm attestation", "all"},
+	{"id", 0, "", "Sequence number / ID for attestation", "all"},
 }
 
 func init() {
@@ -56,6 +57,9 @@ var aaName = &pkix.Name{
 func main() {
 	options.Parse()
 
+	id := *options.Int["id"]
+	options.FailWhen(id == 0, "-id is required")
+
 	kdir := *options.String["keys"]
 	options.FailWhen(kdir == "", "-keys is required")
 
@@ -73,7 +77,7 @@ func main() {
 	options.FailIf(err, "Can't get Tao principal name")
 
 	aa := aaKeys.SigningKey.ToPrincipal()
-	aasub := aa.MakeSubprincipal(auth.SubPrin([]auth.PrinExt{auth.MakePrinExt("tpm", 1)}))
+	aasub := aa.MakeSubprincipal(auth.SubPrin([]auth.PrinExt{auth.MakePrinExt("tpm", id)}))
 	tpm := name.Parent()
 
 	fmt.Printf("TPM-Tao:\n%v\n\n", tpm)
