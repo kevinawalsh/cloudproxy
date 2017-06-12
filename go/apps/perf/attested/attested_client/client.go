@@ -26,6 +26,7 @@ import (
 
 	"github.com/jlmucb/cloudproxy/go/apps/perf/attested/guard"
 	"github.com/jlmucb/cloudproxy/go/tao"
+	"github.com/jlmucb/cloudproxy/go/tao/auth"
 	"github.com/jlmucb/cloudproxy/go/util/options"
 )
 
@@ -38,7 +39,7 @@ var domainPathFlag = flag.String("tao_domain", "", "The Tao domain directory")
 var showName = flag.Bool("show_name", false, "Show local principal name instead of running test")
 var showSubprin = flag.Bool("show_subprin", false, "Show only local subprincipal extension name")
 
-func doRequest(domain *tao.Domain, keys *tao.Keys) bool {
+func doRequest(domain *tao.Domain, keys *tao.Keys, g tao.Guard) bool {
 	fmt.Printf("client: connecting to %s using %s authentication.\n", serverAddr, *demoAuth)
 	var conn net.Conn
 	var err error
@@ -52,8 +53,6 @@ func doRequest(domain *tao.Domain, keys *tao.Keys) bool {
 		options.FailIf(err, "client: couldn't encode TLS keys")
 		conn, err = tls.Dial(network, serverAddr, conf)
 	case "tao":
-		g := guard.NewAttestationGuard()
-		keys.Delegation.SerializedEndorsements = append(keys.Delegation.SerializedEndorsements, g.LocalSerializedTpmAttestation)
 		conn, err = tao.Dial(network, serverAddr, g, domain.Keys.VerifyingKey, keys, nil)
 	}
 	if err != nil {
@@ -78,13 +77,17 @@ func doRequest(domain *tao.Domain, keys *tao.Keys) bool {
 }
 
 func doClient(domain *tao.Domain) {
+	g := guard.NewAttestationGuard() // this changes our tao name, must happen before creating keys
+
 	keys, err := tao.NewTemporaryTaoDelegatedKeys(tao.Signing, nil, tao.Parent())
 	options.FailIf(err, "client: couldn't generate temporary Tao keys")
+
+	keys.Delegation.SerializedEndorsements = append(keys.Delegation.SerializedEndorsements, g.LocalSerializedTpmAttestation)
 
 	pingGood := 0
 	pingFail := 0
 	for i := 0; i < *pingCount || *pingCount < 0; i++ { // negative means forever
-		if doRequest(domain, keys) {
+		if doRequest(domain, keys, g) {
 			pingGood++
 		} else {
 			pingFail++
@@ -125,8 +128,8 @@ func main() {
 		if *showName {
 			fmt.Printf("%s\n", name)
 		} else {
-			ext := name.Ext[1:]
-			fmt.Printf("%s\n", ext)
+			ext := name.Ext[2:]
+			fmt.Printf("%s\n", auth.PrinTail{ext})
 		}
 		return
 	}

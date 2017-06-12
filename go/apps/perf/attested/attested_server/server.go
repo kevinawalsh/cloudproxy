@@ -26,6 +26,7 @@ import (
 
 	"github.com/jlmucb/cloudproxy/go/apps/perf/attested/guard"
 	"github.com/jlmucb/cloudproxy/go/tao"
+	"github.com/jlmucb/cloudproxy/go/tao/auth"
 	"github.com/jlmucb/cloudproxy/go/util/options"
 )
 
@@ -70,6 +71,7 @@ func doServer() {
 		options.FailIf(err, "server: couldn't listen to the network")
 
 	case "tls", "tao":
+		g := guard.NewAttestationGuard()
 		// Generate a private/public key for this hosted program (hp) and
 		// request attestation from the host of the statement "hp speaksFor
 		// host". The resulting certificate, keys.Delegation, is a chain of
@@ -78,9 +80,9 @@ func doServer() {
 		keys, err = tao.NewTemporaryTaoDelegatedKeys(tao.Signing, nil, tao.Parent())
 		options.FailIf(err, "server: failed to generate delegated keys")
 
+		keys.Delegation.SerializedEndorsements = append(keys.Delegation.SerializedEndorsements, g.LocalSerializedTpmAttestation)
+
 		if *demoAuth == "tao" {
-			g := guard.NewAttestationGuard()
-			keys.Delegation.SerializedEndorsements = append(keys.Delegation.SerializedEndorsements, g.LocalSerializedTpmAttestation)
 			sock, err = tao.Listen(network, serverAddr, keys, g, domain.Keys.VerifyingKey, nil)
 			options.FailIf(err, "sever: couldn't create a taonet listener")
 		} else {
@@ -140,8 +142,8 @@ func main() {
 		if *showName {
 			fmt.Printf("%s\n", name)
 		} else {
-			ext := name.Ext[1:]
-			fmt.Printf("%s\n", ext)
+			ext := name.Ext[2:]
+			fmt.Printf("%s\n", auth.PrinTail{ext})
 		}
 		return
 	}

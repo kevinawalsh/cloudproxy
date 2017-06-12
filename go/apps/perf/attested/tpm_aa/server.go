@@ -39,6 +39,7 @@ var opts = []options.Option{
 	{"keys", "", "<dir>", "Directory for storing keys and associated certificates", "all"},
 	{"attestation", "", "<file>", "File for storing signed tpm attestation", "all"},
 	{"id", 0, "", "Sequence number / ID for attestation", "all"},
+	{"delegation", false, "", "Use a speaksfor delegation instead of a predicate", "all"},
 }
 
 func init() {
@@ -84,14 +85,24 @@ func main() {
 	fmt.Printf("Root keys for attestation authority:\n%v\n\n", aa)
 	fmt.Printf("Delegate:\n%v\n\n", aasub)
 
-	delegation := auth.Speaksfor{
-		Delegate:  tpm,
-		Delegator: aasub,
+	var stmt auth.Says
+	if *options.Bool["delegation"] {
+		delegation := auth.Speaksfor{
+			Delegate:  tpm,
+			Delegator: aasub,
+		}
+		stmt = auth.Says{
+			Speaker: aa,
+			Message: delegation,
+		}
+	} else {
+		pred := auth.MakePredicate("TrustedTPM", tpm)
+		stmt = auth.Says{
+			Speaker: aa,
+			Message: pred,
+		}
 	}
-	stmt := auth.Says{
-		Speaker: aa,
-		Message: delegation,
-	}
+
 	fmt.Printf("Statement:\n%v\n\n", stmt)
 
 	attestation, err := tao.GenerateAttestation(aaKeys.SigningKey, nil, stmt)
