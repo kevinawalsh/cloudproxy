@@ -35,6 +35,8 @@ var serverAddr string // see main()
 var pingCount = flag.Int("n", 5, "Number of client/server pings")
 var demoAuth = flag.String("auth", "tao", "\"tcp\", \"tls\", or \"tao\"")
 var domainPathFlag = flag.String("tao_domain", "", "The Tao domain directory")
+var showName = flag.Bool("show_name", false, "Show local principal name instead of running test")
+var showSubprin = flag.Bool("show_subprin", false, "Show only local subprincipal extension name")
 
 func doResponse(conn net.Conn, responseOk chan<- bool) {
 	defer conn.Close()
@@ -77,8 +79,8 @@ func doServer() {
 		options.FailIf(err, "server: failed to generate delegated keys")
 
 		if *demoAuth == "tao" {
-			g := &guard.newAttestationGuard()
-			append(keys.Delegation.SerializedEndorsements, g.localSerializedTpmAttestation)
+			g := guard.NewAttestationGuard()
+			keys.Delegation.SerializedEndorsements = append(keys.Delegation.SerializedEndorsements, g.LocalSerializedTpmAttestation)
 			sock, err = tao.Listen(network, serverAddr, keys, g, domain.Keys.VerifyingKey, nil)
 			options.FailIf(err, "sever: couldn't create a taonet listener")
 		} else {
@@ -128,11 +130,23 @@ func main() {
 		return
 	}
 
-	fmt.Println("Go Tao Demo Server")
-
 	if tao.Parent() == nil {
 		options.Fail(nil, "can't continue: No host Tao available")
 	}
+
+	if *showName || *showSubprin {
+		name, err := tao.Parent().GetTaoName()
+		options.FailIf(err, "can't get name")
+		if *showName {
+			fmt.Printf("%s\n", name)
+		} else {
+			ext := name.Ext[1:]
+			fmt.Printf("%s\n", ext)
+		}
+		return
+	}
+
+	fmt.Println("Go Tao Demo Server")
 
 	doServer()
 	fmt.Println("Server Done")

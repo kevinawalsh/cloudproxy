@@ -36,6 +36,9 @@ type AttestationGuard struct {
 }
 
 func NewAttestationGuard() *AttestationGuard {
+	options.FailWhen(*localTpmAttestation == "", "-local_tpm_attestation is required")
+	options.FailWhen(*peerSubprin == "", "-peer_subprin is required")
+
 	s, err := ioutil.ReadFile(*localTpmAttestation)
 	options.FailIf(err, "can't read peer tpm attestation")
 	var a tao.Attestation
@@ -59,11 +62,12 @@ func (t AttestationGuard) IsAuthorized(name auth.Prin, op string, args []string)
 	// - tpm.pcrs.guard matches attestation from AddRule, which was signed by aa/domain key
 	// - prog matches peer subprin
 	// - config matches our subprin
+	fmt.Printf("checking peer: %v\n", name)
 	ok := true
 	if ok {
-		fmt.Printf("authorized peer: %v\n", name)
+		fmt.Printf("authorized\n")
 	} else {
-		fmt.Printf("denied peer: %v\n", name)
+		fmt.Printf("denied\n")
 	}
 	return ok
 }

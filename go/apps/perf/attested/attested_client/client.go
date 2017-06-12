@@ -35,6 +35,8 @@ var serverAddr string // see main()
 var pingCount = flag.Int("n", 5, "Number of client/server pings")
 var demoAuth = flag.String("auth", "tao", "\"tcp\", \"tls\", or \"tao\"")
 var domainPathFlag = flag.String("tao_domain", "", "The Tao domain directory")
+var showName = flag.Bool("show_name", false, "Show local principal name instead of running test")
+var showSubprin = flag.Bool("show_subprin", false, "Show only local subprincipal extension name")
 
 func doRequest(domain *tao.Domain, keys *tao.Keys) bool {
 	fmt.Printf("client: connecting to %s using %s authentication.\n", serverAddr, *demoAuth)
@@ -113,11 +115,23 @@ func main() {
 		options.Usage("unrecognized authentication mode: %s\n", *demoAuth)
 	}
 
-	fmt.Println("Go Tao Demo Client")
-
 	if tao.Parent() == nil {
 		options.Fail(nil, "can't continue: No host Tao available")
 	}
+
+	if *showName || *showSubprin {
+		name, err := tao.Parent().GetTaoName()
+		options.FailIf(err, "can't get name")
+		if *showName {
+			fmt.Printf("%s\n", name)
+		} else {
+			ext := name.Ext[1:]
+			fmt.Printf("%s\n", ext)
+		}
+		return
+	}
+
+	fmt.Println("Go Tao Demo Client")
 
 	domain, err := tao.LoadDomain(configPath(), nil)
 	options.FailIf(err, "error: couldn't load the tao domain from %s\n", configPath())
