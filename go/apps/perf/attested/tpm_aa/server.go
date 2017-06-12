@@ -69,9 +69,9 @@ func main() {
 	parent := tao.Parent()
 	options.FailWhen(parent == nil, "This must run on tao")
 
-	pwd := []byte("bogus")
-	aaKeys, err := tao.InitOnDiskPBEKeys(tao.Signing, pwd, kdir, aaName)
-	options.FailIf(err, "Can't initialize fresh root AA signing key")
+	pwd := []byte("BogusPass")
+	aaKeys, err := tao.NewOnDiskPBEKeys(tao.Signing, pwd, kdir, aaName)
+	options.FailIf(err, "Can't get or initialize root AA signing key (or domain signing key)")
 
 	name, err := parent.GetTaoName()
 	options.FailIf(err, "Can't get Tao principal name")

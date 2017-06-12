@@ -1,4 +1,4 @@
-// Copyright (c) 2014, Kevin Walsh.  All rights reserved.
+// Copyright (c) 2017, Kevin Walsh.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/jlmucb/cloudproxy/go/apps/perf/attested/guard"
 	"github.com/jlmucb/cloudproxy/go/tao"
 	"github.com/jlmucb/cloudproxy/go/util/options"
 )
@@ -34,20 +35,6 @@ var serverAddr string // see main()
 var pingCount = flag.Int("n", 5, "Number of client/server pings")
 var demoAuth = flag.String("auth", "tao", "\"tcp\", \"tls\", or \"tao\"")
 var domainPathFlag = flag.String("tao_domain", "", "The Tao domain directory")
-var ca = flag.String("ca", "", "address for Tao CA, if any")
-
-var subprinRule = "(forall P: forall Hash: TrustedProgramHash(Hash) and Subprin(P, %v, Hash) implies Authorized(P, \"Execute\"))"
-
-func newTempCAGuard(v *tao.Verifier) (tao.Guard, error) {
-	g := tao.NewTemporaryDatalogGuard()
-	vprin := v.ToPrincipal()
-	rule := fmt.Sprintf(subprinRule, vprin)
-
-	if err := g.AddRule(rule); err != nil {
-		return nil, err
-	}
-	return g, nil
-}
 
 func doResponse(conn net.Conn, responseOk chan<- bool) {
 	defer conn.Close()
@@ -89,19 +76,9 @@ func doServer() {
 		keys, err = tao.NewTemporaryTaoDelegatedKeys(tao.Signing, nil, tao.Parent())
 		options.FailIf(err, "server: failed to generate delegated keys")
 
-		g := domain.Guard
-		if *ca != "" {
-			// Replace keys.Delegation with a "says" statement directly from
-			// the policy key.
-			na, err := tao.RequestTruncatedAttestation(network, *ca, keys, domain.Keys.VerifyingKey)
-			options.FailIf(err, "server: truncated attestation request failed")
-			keys.Delegation = na
-
-			g, err = newTempCAGuard(domain.Keys.VerifyingKey)
-			options.FailIf(err, "server: couldn't set up a new guard")
-		}
-
 		if *demoAuth == "tao" {
+			g := &guard.newAttestationGuard()
+			append(keys.Delegation.SerializedEndorsements, g.localSerializedTpmAttestation)
 			sock, err = tao.Listen(network, serverAddr, keys, g, domain.Keys.VerifyingKey, nil)
 			options.FailIf(err, "sever: couldn't create a taonet listener")
 		} else {

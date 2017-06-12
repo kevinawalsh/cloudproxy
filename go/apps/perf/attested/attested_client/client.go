@@ -1,4 +1,4 @@
-// Copyright (c) 2014, Kevin Walsh.  All rights reserved.
+// Copyright (c) 2017, Kevin Walsh.  All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/jlmucb/cloudproxy/go/apps/perf/attested/guard"
 	"github.com/jlmucb/cloudproxy/go/tao"
 	"github.com/jlmucb/cloudproxy/go/util/options"
 )
@@ -34,11 +35,8 @@ var serverAddr string // see main()
 var pingCount = flag.Int("n", 5, "Number of client/server pings")
 var demoAuth = flag.String("auth", "tao", "\"tcp\", \"tls\", or \"tao\"")
 var domainPathFlag = flag.String("tao_domain", "", "The Tao domain directory")
-var ca = flag.String("ca", "", "address for Tao CA, if any")
 
-var subprinRule = "(forall P: forall Hash: TrustedProgramHash(Hash) and Subprin(P, %v, Hash) implies Authorized(P, \"Execute\"))"
-
-func doRequest(guard tao.Guard, domain *tao.Domain, keys *tao.Keys) bool {
+func doRequest(domain *tao.Domain, keys *tao.Keys) bool {
 	fmt.Printf("client: connecting to %s using %s authentication.\n", serverAddr, *demoAuth)
 	var conn net.Conn
 	var err error
@@ -52,7 +50,9 @@ func doRequest(guard tao.Guard, domain *tao.Domain, keys *tao.Keys) bool {
 		options.FailIf(err, "client: couldn't encode TLS keys")
 		conn, err = tls.Dial(network, serverAddr, conf)
 	case "tao":
-		conn, err = tao.Dial(network, serverAddr, guard, domain.Keys.VerifyingKey, keys, nil)
+		g := guard.NewAttestationGuard()
+		keys.Delegation.SerializedEndorsements = append(keys.Delegation.SerializedEndorsements, g.LocalSerializedTpmAttestation)
+		conn, err = tao.Dial(network, serverAddr, g, domain.Keys.VerifyingKey, keys, nil)
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "client: error connecting to %s: %s\n", serverAddr, err.Error())
@@ -75,40 +75,14 @@ func doRequest(guard tao.Guard, domain *tao.Domain, keys *tao.Keys) bool {
 	return true
 }
 
-func newTempCAGuard(v *tao.Verifier) (tao.Guard, error) {
-	g := tao.NewTemporaryDatalogGuard()
-	vprin := v.ToPrincipal()
-	rule := fmt.Sprintf(subprinRule, vprin)
-
-	if err := g.AddRule(rule); err != nil {
-		return nil, err
-	}
-
-	return g, nil
-}
-
 func doClient(domain *tao.Domain) {
-	network := "tcp"
 	keys, err := tao.NewTemporaryTaoDelegatedKeys(tao.Signing, nil, tao.Parent())
 	options.FailIf(err, "client: couldn't generate temporary Tao keys")
-
-	g := domain.Guard
-	if *ca != "" {
-		na, err := tao.RequestTruncatedAttestation(network, *ca, keys, domain.Keys.VerifyingKey)
-		options.FailIf(err, "client: couldn't get a truncated attestation from %s: %s\n", *ca)
-
-		keys.Delegation = na
-
-		// If we're using a CA, then use a custom guard that accepts only
-		// programs that have talked to the CA.
-		g, err = newTempCAGuard(domain.Keys.VerifyingKey)
-		options.FailIf(err, "client: couldn't set up a new guard")
-	}
 
 	pingGood := 0
 	pingFail := 0
 	for i := 0; i < *pingCount || *pingCount < 0; i++ { // negative means forever
-		if doRequest(g, domain, keys) {
+		if doRequest(domain, keys) {
 			pingGood++
 		} else {
 			pingFail++
