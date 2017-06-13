@@ -149,21 +149,6 @@ func sanitize(s *string, fieldName string, errmsg *string) string {
 	}
 	return *s
 }
-func sanitizeURL(s *string, fieldName string, errmsg *string) string {
-	// We only accept "http[s]://hostname/path..."
-	// though path can be empty.
-	url := sanitize(s, fieldName, errmsg)
-	if *errmsg != "" {
-		return url
-	}
-	url = strings.TrimRight(url, "/")
-	if strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://") {
-		return url
-	} else {
-		*errmsg = "invalid URL prefix"
-		return ""
-	}
-}
 
 func publish(doc []byte) string {
 	docurl := "http://www.example.com"
@@ -407,7 +392,7 @@ func main() {
 	defer sock.Close()
 
 	// srv.Keys = caKeys
-	fmt.Printf("Listening at %s using Tao-authenticated channels\n", addr)
+	fmt.Printf("Listening at %s using Non-authenticated TCP channels\n", addr)
 	// err = srv.ListenAndServe(addr)
 	for {
 		conn, err := sock.Accept()
