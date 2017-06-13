@@ -15,9 +15,11 @@
 package guard
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"strings"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/jlmucb/cloudproxy/go/tao"
@@ -25,21 +27,49 @@ import (
 	"github.com/jlmucb/cloudproxy/go/util/options"
 )
 
+type prinTailFlags []auth.PrinTail
+
+func (f *prinTailFlags) String() string {
+	var s []string
+	for _, p := range *f {
+		s = append(s, fmt.Sprintf("%v", p))
+	}
+	return strings.Join(s, ",")
+}
+
+func (f *prinTailFlags) Set(value string) error {
+	buf := bytes.NewBufferString(value)
+	for buf.Len() > 0 {
+		var p auth.PrinTail
+		_, err := fmt.Fscan(buf, &p)
+		if err != nil {
+			return err
+		}
+		*f = append(*f, p)
+	}
+	return nil
+}
+
 var localTpmAttestation = flag.String("local_tpm_attestation", "", "File containing tpm attestation for this platform")
-var peerSubprin = flag.String("peer_subprin", "", "Subprincipal extension for peer")
+var peerTails prinTailFlags
+
+func init() {
+	flag.Var(&peerTails, "peer_subprin", "Subprincipal extension(s) for peer")
+}
 
 type AttestationGuard struct {
 	LocalSerializedTpmAttestation []byte
 	LocalTpmAttestation           tao.Attestation
 	LocalSubprin                  auth.SubPrin
-	PeerSubprin                   auth.SubPrin
+	PeerSubprins                  []auth.SubPrin
+	PeerGroup                     auth.PrinExt
 	PeerTpm                       auth.Prin
 	tao.TrivialGuard
 }
 
 func NewAttestationGuard() *AttestationGuard {
 	options.FailWhen(*localTpmAttestation == "", "-local_tpm_attestation is required")
-	options.FailWhen(*peerSubprin == "", "-peer_subprin is required")
+	options.FailWhen(len(peerTails) == 0, "-peer_subprin is required")
 
 	localName, err := tao.Parent().GetTaoName() // get last part of our name
 	options.FailIf(err, "can't get name")
@@ -51,19 +81,22 @@ func NewAttestationGuard() *AttestationGuard {
 	err = proto.Unmarshal(s, &a)
 	options.FailIf(err, "can't unmarshal peer tpm attestation")
 
-	var peer auth.PrinTail
-	_, err = fmt.Sscanf(*peerSubprin, "%v", &peer)
-	options.FailIf(err, "can't parse peer subprin")
-
-	// extend our name
-	err = tao.Parent().ExtendTaoName([]auth.PrinExt{auth.MakePrinExt("PeeredWith", peer)})
+	args := make([]interface{}, len(peerTails))
+	peerExts := make([]auth.SubPrin, len(peerTails))
+	for i, p := range peerTails {
+		args[i] = p
+		peerExts[i] = p.Ext
+	}
+	peerGroup := auth.MakePrinExt("PeeredWith", args...)
+	err = tao.Parent().ExtendTaoName([]auth.PrinExt{peerGroup})
 	options.FailIf(err, "can't extend name")
 
 	return &AttestationGuard{
 		LocalSerializedTpmAttestation: s,
 		LocalTpmAttestation:           a,
 		LocalSubprin:                  localSubprin,
-		PeerSubprin:                   peer.Ext,
+		PeerSubprins:                  peerExts,
+		PeerGroup:                     peerGroup,
 		TrivialGuard:                  tao.ConservativeGuard, // default for most methods
 	}
 }
@@ -74,15 +107,16 @@ func (t *AttestationGuard) IsAuthorized(name auth.Prin, op string, args []string
 	// - prog matches peer subprin
 	// - config matches our subprin
 	fmt.Printf("checking peer: %v\n", name)
-	prin := t.PeerTpm.MakeSubprincipal(t.PeerSubprin).MakeSubprincipal(auth.SubPrin{auth.MakePrinExt("PeeredWith", auth.PrinTail{t.LocalSubprin})})
-	fmt.Printf("want: %v\n", prin)
-	ok := prin.Identical(name)
-	if ok {
-		fmt.Printf("authorized\n")
-	} else {
-		fmt.Printf("denied, expecting: %v\n", prin)
+	for _, peerSubprin := range t.PeerSubprins {
+		prin := t.PeerTpm.MakeSubprincipal(peerSubprin).MakeSubprincipal(auth.SubPrin{t.PeerGroup})
+		fmt.Printf("want: %v\n", prin)
+		if prin.Identical(name) {
+			fmt.Printf("authorized\n")
+			return true
+		}
 	}
-	return ok
+	fmt.Printf("denied")
+	return false
 }
 
 func (t *AttestationGuard) AddRule(rule string) error {
