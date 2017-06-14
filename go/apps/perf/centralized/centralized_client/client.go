@@ -82,6 +82,8 @@ func main() {
 
 	for i := 0; i < *pingCount || *pingCount < 0; i++ { // negative means forever
 
+		T.Start()
+
 		// generate ecdsa key pair
 		keys := generateKeysAndCertify(name, domain, T)
 

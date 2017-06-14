@@ -21,3 +21,23 @@ The tpm aa runs on plain linux. The client, server, and app ca all run on tao.
 
 All timings taken on client side.
 
+    export TAO_DOMAIN=/etc/tao-tpm
+
+    # start tao host
+    sudo tao host -tao_domain /etc/tao-tpm start -hosting process
+
+    # make sure there is a domain-signed attestation for tpm
+    tao run tpm_aa -keys /etc/tao-tpm/aa_keys -attestation /etc/tao-tpm/aa-attestation -id 42
+
+    # get the ping/pong/app_ca subprin names
+    rm -f /tmp/*-subprin; for f in app_ca centralized_client centralized_server; do tao run $f -show_subprin >/tmp/$f-subprin; done
+
+    # run app ca
+    tao run app_ca -local_tpm_attestation /etc/tao-tpm/aa-attestation -peer_subprin "`cat /tmp/*-subprin`"
+
+    # run server
+    tao run centralized_server -local_tpm_attestation /etc/tao-tpm/aa-attestation -peer_subprin "`cat /tmp/*-subprin`"
+
+    # run client
+    tao run centralized_client -n 1 -local_tpm_attestation /etc/tao-tpm/aa-attestation -peer_subprin "`cat /tmp/*-subprin`"
+
