@@ -15,45 +15,28 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"net"
 
+	"github.com/jlmucb/cloudproxy/go/apps/perf/ping"
 	"github.com/jlmucb/cloudproxy/go/util/options"
-	"github.com/jlmucb/cloudproxy/go/util/verbose"
 )
 
-var host = flag.String("host", "0.0.0.0", "server host")
-var port = flag.String("port", "8123", "server port")
-var count = flag.Int("n", 1, "Number of trials, negative for indefinite")
-
 func main() {
-	flag.Parse()
+	ping.ParseFlags(false)
 
 	// listen
-	addr := net.JoinHostPort(*host, *port)
-	sock, err := net.Listen("tcp", addr)
-	options.FailIf(err, "error listening at %s", addr)
+	sock, err := net.Listen("tcp", ping.ServerAddr)
+	options.FailIf(err, "listening")
+	fmt.Printf("Listening at %s using unauthenticated TCP channels\n", ping.ServerAddr)
 	defer sock.Close()
-	fmt.Printf("listening at %s.\n", addr)
 
-	for i := 0; i < *count || *count < 0; i++ { // negative means forever
+	for i := 0; i < *ping.Count || *ping.Count < 0; i++ { // negative means forever
 		// accept connection
 		conn, err := sock.Accept()
 		options.FailIf(err, "error accepting connection")
 
-		// recv ping
-		buf := []byte{1}
-		_, err = conn.Read(buf)
-		options.FailIf(err, "can't read")
-		buf[0]++
-
-		// send pong
-		_, err = conn.Write(buf)
-		options.FailIf(err, "can't write")
-
-		conn.Close()
-
-		verbose.Printf("done one\n")
+		// recv ping, send pong, close conn
+		ping.ReadWriteClose(conn)
 	}
 }

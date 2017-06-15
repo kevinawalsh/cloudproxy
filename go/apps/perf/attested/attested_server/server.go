@@ -15,156 +15,22 @@
 package main
 
 import (
-	"bufio"
-	"crypto/tls"
-	"flag"
-	"fmt"
-	"net"
-	"os"
-	"path"
-	"strings"
-
-	"github.com/jlmucb/cloudproxy/go/apps/perf/attested/guard"
-	"github.com/jlmucb/cloudproxy/go/tao"
-	"github.com/jlmucb/cloudproxy/go/tao/auth"
+	"github.com/jlmucb/cloudproxy/go/apps/perf/ping"
 	"github.com/jlmucb/cloudproxy/go/util/options"
 )
 
-var serverHost = flag.String("host", "0.0.0.0", "address for client/server")
-var serverPort = flag.String("port", "8123", "port for client/server")
-var serverAddr string // see main()
-var pingCount = flag.Int("n", 5, "Number of client/server pings")
-var demoAuth = flag.String("auth", "tao", "\"tcp\", \"tls\", or \"tao\"")
-var domainPathFlag = flag.String("tao_domain", "", "The Tao domain directory")
-var showName = flag.Bool("show_name", false, "Show local principal name instead of running test")
-var showSubprin = flag.Bool("show_subprin", false, "Show only local subprincipal extension name")
+func main() {
+	ping.ParseFlags(true)
 
-func doResponse(conn net.Conn, responseOk chan<- bool) {
-	defer conn.Close()
-
-	// Both the TLS and the Tao/TLS connections and listeners handle
-	// authorization during the Accept operation. So, no extra authorization is
-	// needed here.
-	msg, err := bufio.NewReader(conn).ReadString('\n')
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "server: can't read: %s\n", err)
-		responseOk <- false
-		return
-	}
-	msg = strings.TrimSpace(msg)
-	fmt.Printf("server: got message: %s\n", msg)
-	responseOk <- true
-	fmt.Fprintf(conn, "echo(%s)\n", msg)
-}
-
-func doServer() {
-	var sock net.Listener
-	var err error
-	var keys *tao.Keys
-	network := "tcp"
-	domain, err := tao.LoadDomain(configPath(), nil)
-	options.FailIf(err, "error: couldn't load the tao domain from %s\n", configPath())
-
-	switch *demoAuth {
-	case "tcp":
-		sock, err = net.Listen(network, serverAddr)
-		options.FailIf(err, "server: couldn't listen to the network")
-
-	case "tls", "tao":
-		g := guard.NewAttestationGuard()
-		// Generate a private/public key for this hosted program (hp) and
-		// request attestation from the host of the statement "hp speaksFor
-		// host". The resulting certificate, keys.Delegation, is a chain of
-		// "says" statements extending to the policy key. The policy is
-		// checked by the host before this program is executed.
-		keys, err = tao.NewTemporaryTaoDelegatedKeys(tao.Signing, nil, tao.Parent())
-		options.FailIf(err, "server: failed to generate delegated keys")
-
-		keys.Delegation.SerializedEndorsements = append(keys.Delegation.SerializedEndorsements, g.LocalSerializedTpmAttestation)
-
-		if *demoAuth == "tao" {
-			sock, err = tao.Listen(network, serverAddr, keys, g, domain.Keys.VerifyingKey, nil)
-			options.FailIf(err, "sever: couldn't create a taonet listener")
-		} else {
-			conf, err := keys.TLSServerConfig(nil)
-			options.FailIf(err, "server: couldn't encode TLS certificate")
-			sock, err = tls.Listen(network, serverAddr, conf)
-			options.FailIf(err, "server: couldn't create a tls listener")
-		}
-	}
-
-	fmt.Printf("server: listening at %s using %s authentication.\n", serverAddr, *demoAuth)
+	sock := ping.AttestedListen(ping.ServerAddr)
 	defer sock.Close()
 
-	pings := make(chan bool, 5)
-	connCount := 0
+	for i := 0; i < *ping.Count || *ping.Count < 0; i++ { // negative means forever
+		// accept connection
+		conn, err := sock.Accept()
+		options.FailIf(err, "accepting connection")
 
-	go func() {
-		for connCount = 0; connCount < *pingCount || *pingCount < 0; connCount++ { // negative means forever
-			conn, err := sock.Accept()
-			options.FailIf(err, "server: can't accept connection")
-			go doResponse(conn, pings)
-		}
-	}()
-
-	pingGood := 0
-	pingFail := 0
-
-	for {
-		select {
-		case ok := <-pings:
-			if ok {
-				pingGood++
-			} else {
-				pingFail++
-			}
-		}
+		// recv ping, send pong, close conn
+		ping.ReadWriteClose(conn)
 	}
-}
-
-func main() {
-	flag.Parse()
-	serverAddr = net.JoinHostPort(*serverHost, *serverPort)
-	switch *demoAuth {
-	case "tcp", "tls", "tao":
-	default:
-		options.Usage("unrecognized authentication mode: %s\n", *demoAuth)
-		return
-	}
-
-	if tao.Parent() == nil {
-		options.Fail(nil, "can't continue: No host Tao available")
-	}
-
-	if *showName || *showSubprin {
-		name, err := tao.Parent().GetTaoName()
-		options.FailIf(err, "can't get name")
-		if *showName {
-			fmt.Printf("%s\n", name)
-		} else {
-			ext := name.Ext[2:]
-			fmt.Printf("%s\n", auth.PrinTail{ext})
-		}
-		return
-	}
-
-	fmt.Println("Go Tao Demo Server")
-
-	doServer()
-	fmt.Println("Server Done")
-}
-
-func domainPath() string {
-	if *domainPathFlag != "" {
-		return *domainPathFlag
-	}
-	if path := os.Getenv("TAO_DOMAIN"); path != "" {
-		return path
-	}
-	options.Usage("Must supply -tao_domain or set $TAO_DOMAIN")
-	return ""
-}
-
-func configPath() string {
-	return path.Join(domainPath(), "tao.config")
 }
