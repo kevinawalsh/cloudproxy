@@ -31,6 +31,7 @@ func main() {
 	// listen
 	conf, err := keys.TLSServerConfig(keys.Cert["approot"])
 	options.FailIf(err, "config tls")
+	conf.SessionTicketsDisabled = !*ping.ResumeTLSSessions
 	sock, err := tls.Listen("tcp", ping.ServerAddr, conf)
 	options.FailIf(err, "listening")
 	fmt.Printf("Listening at %s.\n", ping.ServerAddr)

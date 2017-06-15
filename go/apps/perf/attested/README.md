@@ -18,20 +18,21 @@ The tpm_aa runs on plain linux. The client and server run on tao.
 
 All timings taken on client side.
 
+    export TAO_DOMAIN=/etc/tao-tpm
+
     # start tao host
-    sudo tao host start -tao_domain /etc/tao-tpm -hosting process
+    sudo tao host -tao_domain $TAO_DOMAIN start -hosting process
 
     # make sure there is a domain-signed attestation for tpm
-    tao -tao_domain /etc/tao-tpm run tpm_aa -keys /etc/tao-tpm/aa_keys -attestation /etc/tao-tpm/aa-attestation -id 42
+    tao run tpm_aa -keys /etc/tao-tpm/aa_keys -attestation /etc/tao-tpm/aa-attestation -id 42
 
     # get the ping/pong subprin names
-    sudo tao -tao_domain /etc/tao-tpm run attested_client -show_subprin >/tmp/client-subprin
-    sudo tao -tao_domain /etc/tao-tpm run attested_server -show_subprin >/tmp/server-subprin
+    rm -f /tmp/*-subprin; for f in attested_client attested_server; do tao run $f -show_subprin >/tmp/$f-subprin; done
 
     # run server
-    tao -tao_domain /etc/tao-tpm run attested_server -local_tpm_attestation /etc/tao-tpm/aa-attestation -peer_subprin `cat /tmp/client-subprin`
+    tao run attested_server -n 101 -local_tpm_attestation /etc/tao-tpm/aa-attestation -peer_subprin "`cat /tmp/*-subprin`"
 
     # run client
-    sudo tao -tao_domain /etc/tao-tpm run attested_client -n 1 -local_tpm_attestation /etc/tao-tpm/aa-attestation -peer_subprin `cat /tmp/server-subprin`
+    tao run attested_client -n 101 -local_tpm_attestation /etc/tao-tpm/aa-attestation -peer_subprin "`cat /tmp/*-subprin`"
 
 

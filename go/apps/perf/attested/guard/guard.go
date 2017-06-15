@@ -67,7 +67,12 @@ type AttestationGuard struct {
 	tao.TrivialGuard
 }
 
+var Guard *AttestationGuard
+
 func NewAttestationGuard() *AttestationGuard {
+	if Guard != nil {
+		return Guard
+	}
 	options.FailWhen(*localTpmAttestation == "", "-local_tpm_attestation is required")
 	options.FailWhen(len(peerTails) == 0, "-peer_subprin is required")
 
@@ -91,7 +96,7 @@ func NewAttestationGuard() *AttestationGuard {
 	err = tao.Parent().ExtendTaoName([]auth.PrinExt{peerGroup})
 	options.FailIf(err, "can't extend name")
 
-	return &AttestationGuard{
+	Guard = &AttestationGuard{
 		LocalSerializedTpmAttestation: s,
 		LocalTpmAttestation:           a,
 		LocalSubprin:                  localSubprin,
@@ -99,6 +104,7 @@ func NewAttestationGuard() *AttestationGuard {
 		PeerGroup:                     peerGroup,
 		TrivialGuard:                  tao.ConservativeGuard, // default for most methods
 	}
+	return Guard
 }
 
 func (t *AttestationGuard) IsAuthorized(name auth.Prin, op string, args []string) bool {
@@ -106,23 +112,23 @@ func (t *AttestationGuard) IsAuthorized(name auth.Prin, op string, args []string
 	// - tpm.pcrs.guard matches attestation from AddRule, which was signed by aa/domain key
 	// - prog matches peer subprin
 	// - config matches our subprin
-	fmt.Printf("checking peer: %v\n", name)
+	// fmt.Printf("checking peer: %v\n", name)
 	for _, peerSubprin := range t.PeerSubprins {
 		prin := t.PeerTpm.MakeSubprincipal(peerSubprin).MakeSubprincipal(auth.SubPrin{t.PeerGroup})
-		fmt.Printf("want: %v\n", prin)
+		// fmt.Printf("want: %v\n", prin)
 		if prin.Identical(name) {
-			fmt.Printf("authorized\n")
+			// fmt.Printf("authorized\n")
 			return true
 		}
 	}
-	fmt.Printf("denied")
+	//fmt.Printf("denied\n")
 	return false
 }
 
 func (t *AttestationGuard) AddRule(rule string) error {
 	// should get attestation about peers tpm key, of the form:
 	//  TrustedTpm(prin)
-	fmt.Printf("add rule: %s\n", rule)
+	// fmt.Printf("add rule: %s\n", rule)
 	var pred auth.Pred
 	_, err := fmt.Sscanf(rule, "%v", &pred)
 	options.FailIf(err, "can't parse endorsement")

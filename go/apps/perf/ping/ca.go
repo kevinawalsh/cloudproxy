@@ -20,6 +20,8 @@ import (
 	"crypto/x509/pkix"
 	"encoding/binary"
 	"fmt"
+	"os"
+	"os/signal"
 	"strings"
 
 	"github.com/golang/protobuf/proto"
@@ -100,7 +102,18 @@ func InitCA() {
 	var err error
 	caKeys, err = tao.NewTemporaryNamedKeys(tao.Signing, CertName)
 	options.FailIf(err, "generating keys")
+	// Print some stats on exit
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	go func() {
+		for _ = range c {
+			fmt.Printf("CA issued %d certificates\n", CertificatesIssued)
+			os.Exit(0)
+		}
+	}()
 }
+
+var CertificatesIssued int
 
 func HandleCSR(conn util.MessageStream) {
 	defer conn.Close()
@@ -193,6 +206,7 @@ func HandleCSR(conn util.MessageStream) {
 	}
 
 	sendResponse(conn, resp)
+	CertificatesIssued++
 }
 
 var cpsTemplate = `Experimental Cloudproxy HTTPS Certificate Authority

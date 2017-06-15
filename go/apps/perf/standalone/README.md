@@ -11,6 +11,11 @@ These run on plain linux. They each:
 
 All timings taken on client side.
 
+
+     standalone_server -n 1001
+     standalone_client -n 1001
+
+
 Performance Experiment: Standalone Proccess, with mTLS and CA
 -------------------------------------------------------------
 
@@ -29,3 +34,7 @@ These all run on plain linux.
 
 All timings taken on client side.
 
+     standalone_ca
+     standalone_ca_server -n 1001
+     standalone_ca_client -n 1001
+     offline_ca_client -n 1001

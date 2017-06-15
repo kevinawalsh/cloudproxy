@@ -15,6 +15,7 @@
 package ping
 
 import (
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"flag"
@@ -59,6 +60,8 @@ var AppCAAddr string
 var StandaloneAppCAHost = flag.String("sappcahost", "localhost", "Standalone App CA server host")
 var StandaloneAppCAPort = flag.String("sappcaport", "8127", "Standalone App CA server port")
 var StandaloneAppCAAddr string
+
+var ResumeTLSSessions = flag.Bool("tls_resume", false, "Use TLS session resumption")
 
 var CertName = &pkix.Name{
 	Country:            []string{"US"},
@@ -156,20 +159,56 @@ func GenerateKeysWithAttestationGuard() (*tao.Keys, tao.Guard) {
 
 func GenerateKeysAndCertifyWithAppCA(name *pkix.Name) *tao.Keys {
 
-	keys, g := GenerateKeysWithAttestationGuard()
+	keys1, g := GenerateKeysWithAttestationGuard()
+	appCAKey = keys1
+	appCAGuard = g
 
-	csr := taoca.NewCertificateSigningRequest(keys.VerifyingKey, name)
+	keys2, err := tao.NewTemporaryKeys(tao.Signing) // alternative: use keys1 for both connections
+	options.FailIf(err, "can't generate key")
+	T.Sample("genkey")
+	csr := taoca.NewCertificateSigningRequest(keys2.VerifyingKey, name)
 	scsr, err := proto.Marshal(csr)
 	options.FailIf(err, "serializing csr")
-	sig, err := keys.SigningKey.Sign(scsr, "csr")
+	sig, err := keys2.SigningKey.Sign(scsr, "csr")
 	T.Sample("gen csr")
 
-	conn, err := tao.Dial("tcp", AppCAAddr, g, Domain.Keys.VerifyingKey, keys, nil)
+	conf, err := keys1.TLSClientConfig(nil)
+	options.FailIf(err, "tls config")
+	conf.SessionTicketsDisabled = !*ResumeTLSSessions
+	if *ResumeTLSSessions {
+		conf.ClientSessionCache = tls.NewLRUClientSessionCache(0)
+	}
+	appCAConf = conf
+	conn, err := tao.Dial("tcp", AppCAAddr, g, Domain.Keys.VerifyingKey, keys1, conf)
 	options.FailIf(err, "connecting to attested app ca")
 	defer conn.Close()
+	T.Sample("connect ca")
 
-	ObtainCertFromCA(conn, keys, csr, sig, "appca", "approot")
-	return keys
+	ObtainCertFromCA(conn, keys2, csr, sig, "appca", "approot")
+	return keys2
+}
+
+var appCAKey *tao.Keys
+var appCAGuard tao.Guard
+var appCAConf *tls.Config
+
+func GenerateKeysAndRecertifyWithAppCA(name *pkix.Name) *tao.Keys {
+	keys2, err := tao.NewTemporaryKeys(tao.Signing) // alternative: use keys1 for yet another connection
+	options.FailIf(err, "can't generate key")
+	T.Sample("regenkey")
+	csr := taoca.NewCertificateSigningRequest(keys2.VerifyingKey, name)
+	scsr, err := proto.Marshal(csr)
+	options.FailIf(err, "serializing csr")
+	sig, err := keys2.SigningKey.Sign(scsr, "csr")
+	T.Sample("regen csr")
+
+	conn, err := tao.Dial("tcp", AppCAAddr, appCAGuard, Domain.Keys.VerifyingKey, appCAKey, appCAConf)
+	options.FailIf(err, "connecting to attested app ca")
+	defer conn.Close()
+	T.Sample("reconnect ca")
+
+	ObtainCertFromCA(conn, keys2, csr, sig, "appca", "approot")
+	return keys2
 }
 
 func ObtainCertFromCA(conn net.Conn, keys *tao.Keys, csr *taoca.CSR, sig []byte, ca, root string) {

@@ -24,7 +24,7 @@ All timings taken on client side.
     export TAO_DOMAIN=/etc/tao-tpm
 
     # start tao host
-    sudo tao host -tao_domain /etc/tao-tpm start -hosting process
+    sudo tao host -tao_domain $TAO_DOMAIN start -hosting process
 
     # make sure there is a domain-signed attestation for tpm
     tao run tpm_aa -keys /etc/tao-tpm/aa_keys -attestation /etc/tao-tpm/aa-attestation -id 42
@@ -36,8 +36,8 @@ All timings taken on client side.
     tao run app_ca -local_tpm_attestation /etc/tao-tpm/aa-attestation -peer_subprin "`cat /tmp/*-subprin`"
 
     # run server
-    tao run centralized_server -local_tpm_attestation /etc/tao-tpm/aa-attestation -peer_subprin "`cat /tmp/*-subprin`"
+    tao run centralized_server -n 1001 -local_tpm_attestation /etc/tao-tpm/aa-attestation -peer_subprin "`cat /tmp/*-subprin`"
 
     # run client
-    tao run centralized_client -n 1 -local_tpm_attestation /etc/tao-tpm/aa-attestation -peer_subprin "`cat /tmp/*-subprin`"
+    tao run centralized_client -n 1001 -local_tpm_attestation /etc/tao-tpm/aa-attestation -peer_subprin "`cat /tmp/*-subprin`"
 

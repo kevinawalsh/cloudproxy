@@ -28,21 +28,26 @@ func main() {
 	// generate keys
 	keys := ping.GenerateKeysAndCertifyWithStandaloneAppCA(ping.CertName)
 
-	// listen
-	conf, err := keys.TLSServerConfig(keys.Cert["root"])
-	options.FailIf(err, "config tls")
+	conf, err := keys.TLSClientConfig(keys.Cert["root"])
+	options.FailIf(err, "tls config")
 	conf.SessionTicketsDisabled = !*ping.ResumeTLSSessions
-	sock, err := tls.Listen("tcp", ping.ServerAddr, conf)
-	options.FailIf(err, "listening")
-	fmt.Printf("Listening at %s.\n", ping.ServerAddr)
-	defer sock.Close()
+	if *ping.ResumeTLSSessions {
+		conf.ClientSessionCache = tls.NewLRUClientSessionCache(0)
+	}
+
+	T := ping.EnableTracing()
 
 	for i := 0; i < *ping.Count || *ping.Count < 0; i++ { // negative means forever
-		// accept connection
-		conn, err := sock.Accept()
-		options.FailIf(err, "accepting connection")
+		T.Start()
 
-		// recv ping, send pong, close conn
-		ping.ReadWriteClose(conn)
+		// open connection
+		conn, err := tls.Dial("tcp", ping.ServerAddr, conf)
+		options.FailIf(err, "connecting")
+		T.Sample("connect")
+
+		// send ping, recv pong, close conn
+		ping.WriteReadClose(conn)
 	}
+
+	fmt.Println(T)
 }

@@ -16,11 +16,15 @@ package main
 
 import (
 	"crypto/tls"
+	"flag"
 	"fmt"
 
 	"github.com/jlmucb/cloudproxy/go/apps/perf/ping"
 	"github.com/jlmucb/cloudproxy/go/util/options"
 )
+
+var reconnect = flag.Bool("reconnect", false, "ping, then ping again, using new tls config from fresh ca")
+var halfReconnect = flag.Bool("half_reconnect", false, "ping, then ping again, using new tls config from same ca")
 
 func main() {
 	ping.ParseFlags(true)
@@ -36,12 +40,43 @@ func main() {
 		// open connection
 		conf, err := keys.TLSClientConfig(keys.Cert["approot"])
 		options.FailIf(err, "tls config")
+		conf.SessionTicketsDisabled = !*ping.ResumeTLSSessions
+		if *ping.ResumeTLSSessions {
+			conf.ClientSessionCache = tls.NewLRUClientSessionCache(0)
+		}
 		conn, err := tls.Dial("tcp", ping.ServerAddr, conf)
 		options.FailIf(err, "connecting")
 		T.Sample("connect")
 
 		// send ping, recv pong, close conn
 		ping.WriteReadClose(conn)
+
+		if *halfReconnect {
+			// generate keys
+			keys = ping.GenerateKeysAndRecertifyWithAppCA(ping.CertName)
+
+			// open connection
+			conf, err := keys.TLSClientConfig(keys.Cert["approot"])
+			options.FailIf(err, "tls config")
+			conf.SessionTicketsDisabled = !*ping.ResumeTLSSessions
+			if *ping.ResumeTLSSessions {
+				conf.ClientSessionCache = tls.NewLRUClientSessionCache(0)
+			}
+			conn, err := tls.Dial("tcp", ping.ServerAddr, conf)
+			options.FailIf(err, "connecting")
+			T.Sample("reconnect")
+
+			// send ping, recv pong, close conn
+			ping.WriteReadClose(conn)
+		} else if *reconnect {
+			// open connection
+			conn, err := tls.Dial("tcp", ping.ServerAddr, conf)
+			options.FailIf(err, "connecting")
+			T.Sample("reconnect")
+
+			// send ping, recv pong, close conn
+			ping.WriteReadClose(conn)
+		}
 	}
 
 	fmt.Println(T)

@@ -16,11 +16,14 @@ package main
 
 import (
 	"crypto/tls"
+	"flag"
 	"fmt"
 
 	"github.com/jlmucb/cloudproxy/go/apps/perf/ping"
 	"github.com/jlmucb/cloudproxy/go/util/options"
 )
+
+var reconnect = flag.Bool("reconnect", false, "ping, then ping again, using same tls config")
 
 func main() {
 	ping.ParseFlags(false)
@@ -36,12 +39,26 @@ func main() {
 		// open connection
 		conf, err := keys.TLSClientConfig(keys.Cert["root"])
 		options.FailIf(err, "tls config")
+		conf.SessionTicketsDisabled = !*ping.ResumeTLSSessions
+		if *ping.ResumeTLSSessions {
+			conf.ClientSessionCache = tls.NewLRUClientSessionCache(0)
+		}
 		conn, err := tls.Dial("tcp", ping.ServerAddr, conf)
 		options.FailIf(err, "connecting")
 		T.Sample("connect")
 
 		// send ping, recv pong, close conn
 		ping.WriteReadClose(conn)
+
+		if *reconnect {
+			// re-open connection
+			conn, err := tls.Dial("tcp", ping.ServerAddr, conf)
+			options.FailIf(err, "connecting")
+			T.Sample("reconnect")
+
+			// re-send ping, recv pong, close conn
+			ping.WriteReadClose(conn)
+		}
 	}
 
 	fmt.Println(T)

@@ -15,12 +15,16 @@
 package main
 
 import (
+	"crypto/tls"
+	"flag"
 	"fmt"
 
 	"github.com/jlmucb/cloudproxy/go/apps/perf/ping"
 	"github.com/jlmucb/cloudproxy/go/tao"
 	"github.com/jlmucb/cloudproxy/go/util/options"
 )
+
+var reconnect = flag.Bool("reconnect", false, "ping, then ping again, using same tls config from same ca")
 
 func main() {
 	ping.ParseFlags(true)
@@ -34,12 +38,28 @@ func main() {
 		keys, g := ping.GenerateKeysWithAttestationGuard()
 
 		// open connection
-		conn, err := tao.Dial("tcp", ping.ServerAddr, g, ping.Domain.Keys.VerifyingKey, keys, nil)
+		conf, err := keys.TLSClientConfig(nil)
+		options.FailIf(err, "tls config")
+		conf.SessionTicketsDisabled = !*ping.ResumeTLSSessions
+		if *ping.ResumeTLSSessions {
+			conf.ClientSessionCache = tls.NewLRUClientSessionCache(0)
+		}
+		conn, err := tao.Dial("tcp", ping.ServerAddr, g, ping.Domain.Keys.VerifyingKey, keys, conf)
 		options.FailIf(err, "connecting")
 		T.Sample("connect")
 
 		// send ping, recv pong, close conn
 		ping.WriteReadClose(conn)
+
+		if *reconnect {
+			// re-open connection
+			conn, err := tao.Dial("tcp", ping.ServerAddr, g, ping.Domain.Keys.VerifyingKey, keys, conf)
+			options.FailIf(err, "connecting")
+			T.Sample("connect")
+
+			// re-send ping, recv pong, close conn
+			ping.WriteReadClose(conn)
+		}
 	}
 
 	fmt.Println(T)
