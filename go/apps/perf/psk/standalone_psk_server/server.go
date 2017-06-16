@@ -15,26 +15,48 @@
 package main
 
 import (
-	"crypto/tls"
 	"fmt"
+
+	// "github.com/raff/tls-ext"
+	// "github.com/raff/tls-psk"
+	tls "github.com/mordyovits/golang-crypto-tls"
 
 	"github.com/jlmucb/cloudproxy/go/apps/perf/ping"
 	"github.com/jlmucb/cloudproxy/go/util/options"
 )
 
+func getIdentityHint() ([]byte, error) {
+	return []byte("hint5678901234567890123456789"), nil
+	// return nil, nil
+}
+
+func getIdentity(identityHint []byte) (string, error) {
+	return "clientid901234567890123456789", nil
+}
+
+// hard-coded pre-shared key
+var sharedKey = []byte{0x6c, 0x56, 0x2e, 0x2e, 0xbc, 0xe0, 0x66, 0xad, 0x75, 0x2b, 0x75, 0x17, 0x9c, 0x51, 0x3b, 0x7a, 0xb8, 0x67, 0x5a, 0x7b, 0x5d, 0x94, 0xb2, 0x0d, 0x3a, 0x36, 0xcb, 0xb6, 0xbb, 0x60}
+
+func getKey(id string) ([]byte, error) {
+	return sharedKey, nil
+}
+
 func main() {
 	ping.ParseFlags(false)
 
-	// generate keys
-	keys := ping.GenerateKeysAndCertifyWithStandaloneAppCA(ping.CertName)
+	conf := &tls.Config{
+		CipherSuites: []uint16{tls.TLS_PSK_WITH_AES_128_GCM_SHA256},
+		// Certificates:   []tls.Certificate{tls.Certificate{}},
+		GetPSKIdentityHint: getIdentityHint,
+		GetPSKIdentity:     getIdentity,
+		GetPSKKey:          getKey,
+	}
 
 	// listen
-	conf, err := keys.TLSServerConfig(keys.Cert["root"])
-	options.FailIf(err, "config tls")
 	conf.SessionTicketsDisabled = !*ping.ResumeTLSSessions
 	sock, err := tls.Listen("tcp", ping.ServerAddr, conf)
 	options.FailIf(err, "listening")
-	fmt.Printf("Listening at %s using TLS with Standalone CA.\n", ping.ServerAddr)
+	fmt.Printf("Listening at %s using TLS-PSK.\n", ping.ServerAddr)
 	defer sock.Close()
 
 	for i := 0; i < *ping.Count || *ping.Count < 0; i++ { // negative means forever
