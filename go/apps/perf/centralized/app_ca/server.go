@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// app_ca acts as very tao-based CA to provide HTTPS/x509 certificates to
+// app_ca acts as simple tao-based CA to provide HTTPS/x509 certificates to
 // a specific list of principals
 //
 // Requests:

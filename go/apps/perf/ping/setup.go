@@ -27,6 +27,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/jlmucb/cloudproxy/go/apps/perf/attested/guard"
+	psk "github.com/jlmucb/cloudproxy/go/apps/perf/central_psk"
 	"github.com/jlmucb/cloudproxy/go/tao"
 	"github.com/jlmucb/cloudproxy/go/tao/auth"
 	"github.com/jlmucb/cloudproxy/go/util"
@@ -61,6 +62,10 @@ var StandaloneAppCAHost = flag.String("sappcahost", "localhost", "Standalone App
 var StandaloneAppCAPort = flag.String("sappcaport", "8127", "Standalone App CA server port")
 var StandaloneAppCAAddr string
 
+var AppKAHost = flag.String("appkahost", "localhost", "Attested App KA server host")
+var AppKAPort = flag.String("appkaport", "8127", "Attested App KA server port")
+var AppKAAddr string
+
 var ResumeTLSSessions = flag.Bool("tls_resume", false, "Use TLS session resumption")
 
 var CertName = &pkix.Name{
@@ -85,6 +90,7 @@ func ParseFlags(requiresTao bool) {
 	ServerAddr = net.JoinHostPort(*ServerHost, *ServerPort)
 	AppCAAddr = net.JoinHostPort(*AppCAHost, *AppCAPort)
 	StandaloneAppCAAddr = net.JoinHostPort(*StandaloneAppCAHost, *StandaloneAppCAPort)
+	AppKAAddr = net.JoinHostPort(*AppKAHost, *AppKAPort)
 
 	if !requiresTao {
 		return
@@ -188,9 +194,9 @@ func GenerateKeysAndCertifyWithAppCA(name *pkix.Name) *tao.Keys {
 	return keys2
 }
 
-var appCAKey *tao.Keys
-var appCAGuard tao.Guard
-var appCAConf *tls.Config
+var appCAKey *tao.Keys    // also used for PSK_KA
+var appCAGuard tao.Guard  // also used for PSK_KA
+var appCAConf *tls.Config // also used for PSK_KA
 
 func GenerateKeysAndRecertifyWithAppCA(name *pkix.Name) *tao.Keys {
 	keys2, err := tao.NewTemporaryKeys(tao.Signing) // alternative: use keys1 for yet another connection
@@ -250,6 +256,75 @@ func ObtainCertFromCA(conn net.Conn, keys *tao.Keys, csr *taoca.CSR, sig []byte,
 	keys.Cert[root] = chain[len(chain)-1]
 
 	T.Sample("getcert")
+}
+
+func ObtainPreSharedKeyFromKA() []byte {
+	// generate keys
+	keys1, g := GenerateKeysWithAttestationGuard()
+	appCAKey = keys1
+	appCAGuard = g
+
+	// open connection
+	conf, err := keys1.TLSClientConfig(nil)
+	options.FailIf(err, "tls config")
+	conf.SessionTicketsDisabled = !*ResumeTLSSessions
+	if *ResumeTLSSessions {
+		conf.ClientSessionCache = tls.NewLRUClientSessionCache(0)
+	}
+	appCAConf = conf
+	conn, err := tao.Dial("tcp", AppKAAddr, g, Domain.Keys.VerifyingKey, keys1, conf)
+	options.FailIf(err, "connecting to attested psk ka")
+	T.Sample("connect psk ka")
+
+	peerGroup := g.(*guard.AttestationGuard).PeerGroup
+	req := &psk.KGRequest{
+		PeerGroup: auth.Marshal(auth.PrinTail{auth.SubPrin{peerGroup}}),
+	}
+
+	ms := util.NewMessageStream(conn)
+	_, err = ms.WriteMessage(req)
+	options.FailIf(err, "sending kgr")
+
+	var resp psk.KGResponse
+	err = ms.ReadMessage(&resp)
+	options.FailIf(err, "reading ka response")
+	ms.Close()
+
+	if resp.ErrorDetail != nil && len(*resp.ErrorDetail) != 0 {
+		options.Fail(nil, *resp.ErrorDetail)
+	}
+	return resp.KeyMaterial
+}
+
+func ObtainAnotherPreSharedKeyFromKA() []byte {
+	// generate keys
+	keys1 := appCAKey
+	g := appCAGuard
+
+	// open connection
+	conf := appCAConf
+	conn, err := tao.Dial("tcp", AppKAAddr, g, Domain.Keys.VerifyingKey, keys1, conf)
+	options.FailIf(err, "connecting to attested psk ka")
+	T.Sample("connect psk ka")
+
+	peerGroup := g.(*guard.AttestationGuard).PeerGroup
+	req := &psk.KGRequest{
+		PeerGroup: auth.Marshal(auth.PrinTail{auth.SubPrin{peerGroup}}),
+	}
+
+	ms := util.NewMessageStream(conn)
+	_, err = ms.WriteMessage(req)
+	options.FailIf(err, "sending kgr")
+
+	var resp psk.KGResponse
+	err = ms.ReadMessage(&resp)
+	options.FailIf(err, "reading ka response")
+	ms.Close()
+
+	if len(*resp.ErrorDetail) != 0 {
+		options.Fail(nil, *resp.ErrorDetail)
+	}
+	return resp.KeyMaterial
 }
 
 func WriteReadClose(conn io.ReadWriteCloser) {

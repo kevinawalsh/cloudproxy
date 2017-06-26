@@ -32,15 +32,15 @@ type ConnAuth struct {
 	Authenticate bool
 
 	// delegation is used by remote to authenticate local side
-	delegation *Attestation
+	Delegation *Attestation
 
 	// AuthenticatePeer controls whether local requires remote to authenticate
 	// using a Tao delegation. If false, guard is ignored.
 	AuthenticatePeer bool
 
 	// guard and verifier are used by local to authenticate remote side
-	guard    Guard
-	verifier *Verifier
+	Guard    Guard
+	Verifier *Verifier
 }
 
 // A Listener implements net.Listener for Tao connections. Each time it accepts
@@ -150,9 +150,9 @@ func (conn *Conn) Handshake() error {
 }
 
 func (conn *Conn) sendCredentials(ms util.MessageStream) {
-	if conn.Authenticate && conn.delegation != nil {
+	if conn.Authenticate && conn.Delegation != nil {
 		ms.WriteString("delegation")
-		ms.WriteMessage(conn.delegation)
+		ms.WriteMessage(conn.Delegation)
 	} else if conn.Authenticate {
 		ms.WriteString("key")
 	} else {
@@ -177,14 +177,14 @@ func (conn *Conn) recvCredentials(ms util.MessageStream) {
 			ms.SetErr(err)
 			return
 		}
-		if conn.guard != nil {
-			if conn.verifier != nil {
-				if err = AddEndorsements(conn.guard, &a, conn.verifier); err != nil {
+		if conn.Guard != nil {
+			if conn.Verifier != nil {
+				if err = AddEndorsements(conn.Guard, &a, conn.Verifier); err != nil {
 					ms.SetErr(err)
 					return
 				}
 			}
-			if !conn.guard.IsAuthorized(p, "Connect", nil) {
+			if !conn.Guard.IsAuthorized(p, "Connect", nil) {
 				ms.SetErr(errors.New("principal delegator in client attestation is not authorized to connect"))
 				return
 			}
@@ -200,7 +200,7 @@ func (conn *Conn) recvCredentials(ms util.MessageStream) {
 		p := v.ToPrincipal()
 		conn.peer = &p
 	} else if m == "anonymous" {
-		if conn.guard != nil {
+		if conn.Guard != nil {
 			err = errors.New("peer did not provide tao delegation")
 			ms.SetErr(err)
 			return
@@ -261,10 +261,10 @@ func Listen(network, laddr string, keys *Keys, g Guard, v *Verifier, conf *tls.C
 		Listener: l,
 		ConnAuth: ConnAuth{
 			Authenticate:     keys != nil,
-			delegation:       del,
+			Delegation:       del,
 			AuthenticatePeer: g != nil,
-			guard:            g,
-			verifier:         v,
+			Guard:            g,
+			Verifier:         v,
 		},
 	}, nil
 }

@@ -57,10 +57,10 @@ func Dial(network, addr string, guard Guard, v *Verifier, keys *Keys, conf *tls.
 		isServer: false,
 		ConnAuth: ConnAuth{
 			Authenticate:     keys != nil,
-			delegation:       del,
+			Delegation:       del,
 			AuthenticatePeer: guard != nil,
-			guard:            guard,
-			verifier:         v,
+			Guard:            guard,
+			Verifier:         v,
 		},
 		Conn: conn,
 	}
