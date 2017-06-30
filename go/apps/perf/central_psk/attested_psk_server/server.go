@@ -16,40 +16,57 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	// "github.com/raff/tls-ext"
 	// "github.com/raff/tls-psk"
 	tls "github.com/mordyovits/golang-crypto-tls"
 
+	"github.com/davecheney/junk/clock"
 	"github.com/jlmucb/cloudproxy/go/apps/perf/ping"
 	"github.com/jlmucb/cloudproxy/go/util/options"
 )
 
+// var tHandshake time.Time
+
 func getIdentityHint() ([]byte, error) {
+	// tHandshake = clock.Monotonic.Now()
 	return []byte("hint5678901234567890123456789"), nil
 	// return nil, nil
 }
 
-func getIdentity(identityHint []byte) (string, error) {
-	return "clientid901234567890123456789", nil
-}
-
 var sharedKey []byte
 
+var durationGetKey time.Duration
+
+// var durationHandshake time.Duration
+
 func getKey(id string) ([]byte, error) {
+	tStart := clock.Monotonic.Now()
+	// durationHandshake = tStart.Sub(tHandshake)
+	if id == "clientidFreshKey7890123456789" {
+		sharedKey = ping.ObtainPreSharedKeyFromKA()
+	} else if id == "clientidFastFreshKey123456789" {
+		sharedKey = ping.ObtainAnotherPreSharedKeyFromKA()
+	} else if id == "clientidSameKey67890123456789" {
+		options.FailWhen(sharedKey == nil, "no shared key yet")
+	} else {
+		options.Fail(nil, "no such shared key")
+	}
+	options.FailWhen(sharedKey == nil, "missing key")
+	tEnd := clock.Monotonic.Now()
+	durationGetKey = tEnd.Sub(tStart)
 	return sharedKey, nil
 }
 
 func main() {
 	ping.ParseFlags(true)
 
-	sharedKey = ping.ObtainPreSharedKeyFromKA()
-
 	conf := &tls.Config{
 		CipherSuites: []uint16{tls.TLS_PSK_WITH_AES_128_GCM_SHA256},
 		// Certificates:   []tls.Certificate{tls.Certificate{}},
 		GetPSKIdentityHint: getIdentityHint,
-		GetPSKIdentity:     getIdentity,
+		GetPSKIdentity:     nil, // only for client
 		GetPSKKey:          getKey,
 	}
 
@@ -66,6 +83,6 @@ func main() {
 		options.FailIf(err, "accepting connection")
 
 		// recv ping, send pong, close conn
-		ping.ReadWriteClose(conn)
+		ping.ReadWriteClose(conn, func() (int64, int64) { return int64(durationGetKey), 0 })
 	}
 }

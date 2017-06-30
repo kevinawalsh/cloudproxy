@@ -18,6 +18,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/binary"
 	"flag"
 	"fmt"
 	"io"
@@ -321,40 +322,52 @@ func ObtainAnotherPreSharedKeyFromKA() []byte {
 	options.FailIf(err, "reading ka response")
 	ms.Close()
 
-	if len(*resp.ErrorDetail) != 0 {
+	if resp.ErrorDetail != nil && len(*resp.ErrorDetail) != 0 {
 		options.Fail(nil, *resp.ErrorDetail)
 	}
 	return resp.KeyMaterial
 }
 
-func WriteReadClose(conn io.ReadWriteCloser) {
+func WriteReadClose(conn io.ReadWriteCloser, a, b int64) (x int64, y int64) {
 	// send ping
-	buf := []byte{1}
-	_, err := conn.Write(buf)
+	var buf [16]byte
+	binary.LittleEndian.PutUint64(buf[0:8], uint64(a))
+	binary.LittleEndian.PutUint64(buf[8:16], uint64(b))
+
+	_, err := conn.Write(buf[:])
 	options.FailIf(err, "writing")
 
 	// recv pong
-	n, err := conn.Read(buf)
-	options.FailWhen(n != 1, "bad pong: len=%d\n", n)
-	options.FailWhen(buf[0] != 2, "bad pong: %d\n", buf[0])
+	n, err := conn.Read(buf[:])
+	options.FailWhen(n != 16, "bad pong: len=%d\n", n)
+	// options.FailWhen(buf[0] != 2, "bad pong: %d\n", buf[0])
 	T.Sample("rtt")
 
 	// close tls connection
 	err = conn.Close()
 	options.FailIf(err, "closing")
+
+	x = int64(binary.LittleEndian.Uint64(buf[0:8]))
+	y = int64(binary.LittleEndian.Uint64(buf[8:16]))
+	return x, y
 }
 
-func ReadWriteClose(conn io.ReadWriteCloser) {
+func ReadWriteClose(conn io.ReadWriteCloser, getData func() (x, y int64)) (a int64, b int64) {
 	// recv ping
-	buf := []byte{1}
-	_, err := conn.Read(buf)
-	options.FailIf(err, "reading")
-	buf[0]++
+	var buf [16]byte
+	n, err := conn.Read(buf[:])
+	options.FailWhen(n != 16, "bad ping: len=%d\n", n)
+	a = int64(binary.LittleEndian.Uint64(buf[0:8]))
+	b = int64(binary.LittleEndian.Uint64(buf[8:16]))
 
 	// send pong
-	_, err = conn.Write(buf)
+	x, y := getData()
+	binary.LittleEndian.PutUint64(buf[0:8], uint64(x))
+	binary.LittleEndian.PutUint64(buf[8:16], uint64(y))
+	_, err = conn.Write(buf[:])
 	options.FailIf(err, "writing")
 
 	err = conn.Close()
 	options.FailIf(err, "closing")
+	return a, b
 }

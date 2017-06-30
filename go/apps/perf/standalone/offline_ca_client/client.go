@@ -46,7 +46,7 @@ func main() {
 		T.Sample("connect")
 
 		// send ping, recv pong, close conn
-		ping.WriteReadClose(conn)
+		ping.WriteReadClose(conn, 0, 0)
 	}
 
 	fmt.Println(T)
