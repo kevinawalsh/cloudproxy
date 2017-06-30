@@ -65,6 +65,6 @@ func main() {
 		options.FailIf(err, "accepting connection")
 
 		// recv ping, send pong, close conn
-		ping.ReadWriteClose(conn, func() (int64, int64) { return 0, 0 })
+		ping.ReadWriteClose(conn, nil)
 	}
 }

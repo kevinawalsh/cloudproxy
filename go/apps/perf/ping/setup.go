@@ -69,6 +69,8 @@ var AppKAAddr string
 
 var ResumeTLSSessions = flag.Bool("tls_resume", false, "Use TLS session resumption")
 
+var PingBufSize = flag.Int("buf", 24, "Ping Buffer Size")
+
 var CertName = &pkix.Name{
 	Country:            []string{"US"},
 	Province:           []string{"MA"},
@@ -294,6 +296,7 @@ func ObtainPreSharedKeyFromKA() []byte {
 	if resp.ErrorDetail != nil && len(*resp.ErrorDetail) != 0 {
 		options.Fail(nil, *resp.ErrorDetail)
 	}
+	T.Sample("obtain psk")
 	return resp.KeyMaterial
 }
 
@@ -306,7 +309,7 @@ func ObtainAnotherPreSharedKeyFromKA() []byte {
 	conf := appCAConf
 	conn, err := tao.Dial("tcp", AppKAAddr, g, Domain.Keys.VerifyingKey, keys1, conf)
 	options.FailIf(err, "connecting to attested psk ka")
-	T.Sample("connect psk ka")
+	T.Sample("reconnect psk ka")
 
 	peerGroup := g.(*guard.AttestationGuard).PeerGroup
 	req := &psk.KGRequest{
@@ -325,21 +328,20 @@ func ObtainAnotherPreSharedKeyFromKA() []byte {
 	if resp.ErrorDetail != nil && len(*resp.ErrorDetail) != 0 {
 		options.Fail(nil, *resp.ErrorDetail)
 	}
+	T.Sample("reobtain psk")
 	return resp.KeyMaterial
 }
 
-func WriteReadClose(conn io.ReadWriteCloser, a, b int64) (x int64, y int64) {
+func WriteReadClose(conn io.ReadWriteCloser) (x int64, y int64, z int64) {
 	// send ping
-	var buf [16]byte
-	binary.LittleEndian.PutUint64(buf[0:8], uint64(a))
-	binary.LittleEndian.PutUint64(buf[8:16], uint64(b))
+	buf := make([]byte, *PingBufSize)
 
 	_, err := conn.Write(buf[:])
 	options.FailIf(err, "writing")
 
 	// recv pong
 	n, err := conn.Read(buf[:])
-	options.FailWhen(n != 16, "bad pong: len=%d\n", n)
+	options.FailWhen(n != *PingBufSize, "bad pong: len=%d\n", n)
 	// options.FailWhen(buf[0] != 2, "bad pong: %d\n", buf[0])
 	T.Sample("rtt")
 
@@ -349,25 +351,27 @@ func WriteReadClose(conn io.ReadWriteCloser, a, b int64) (x int64, y int64) {
 
 	x = int64(binary.LittleEndian.Uint64(buf[0:8]))
 	y = int64(binary.LittleEndian.Uint64(buf[8:16]))
-	return x, y
+	z = int64(binary.LittleEndian.Uint64(buf[16:24]))
+	return x, y, z
 }
 
-func ReadWriteClose(conn io.ReadWriteCloser, getData func() (x, y int64)) (a int64, b int64) {
+func ReadWriteClose(conn io.ReadWriteCloser, getData func() (int64, int64, int64)) {
 	// recv ping
-	var buf [16]byte
+	buf := make([]byte, *PingBufSize)
 	n, err := conn.Read(buf[:])
-	options.FailWhen(n != 16, "bad ping: len=%d\n", n)
-	a = int64(binary.LittleEndian.Uint64(buf[0:8]))
-	b = int64(binary.LittleEndian.Uint64(buf[8:16]))
+	options.FailWhen(n != *PingBufSize, "bad ping: len=%d\n", n)
 
 	// send pong
-	x, y := getData()
+	var x, y, z int64
+	if getData != nil {
+		x, y, z = getData()
+	}
 	binary.LittleEndian.PutUint64(buf[0:8], uint64(x))
 	binary.LittleEndian.PutUint64(buf[8:16], uint64(y))
+	binary.LittleEndian.PutUint64(buf[16:24], uint64(z))
 	_, err = conn.Write(buf[:])
 	options.FailIf(err, "writing")
 
 	err = conn.Close()
 	options.FailIf(err, "closing")
-	return a, b
 }

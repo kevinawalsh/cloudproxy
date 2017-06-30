@@ -49,7 +49,7 @@ func main() {
 		T.Sample("connect")
 
 		// send ping, recv pong, close conn
-		ping.WriteReadClose(conn, 0, 0)
+		ping.WriteReadClose(conn)
 
 		if *halfReconnect {
 			// generate keys
@@ -67,7 +67,7 @@ func main() {
 			T.Sample("reconnect")
 
 			// send ping, recv pong, close conn
-			ping.WriteReadClose(conn, 0, 0)
+			ping.WriteReadClose(conn)
 		} else if *reconnect {
 			// open connection
 			conn, err := tls.Dial("tcp", ping.ServerAddr, conf)
@@ -75,7 +75,7 @@ func main() {
 			T.Sample("reconnect")
 
 			// send ping, recv pong, close conn
-			ping.WriteReadClose(conn, 0, 0)
+			ping.WriteReadClose(conn)
 		}
 	}
 

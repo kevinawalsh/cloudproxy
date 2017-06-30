@@ -68,7 +68,7 @@ func main() {
 		T.Sample("connect")
 
 		// send ping, recv pong, close conn
-		ping.WriteReadClose(conn, 0, 0)
+		ping.WriteReadClose(conn)
 
 		if *reconnect {
 			// re-open connection
@@ -77,7 +77,7 @@ func main() {
 			T.Sample("reconnect")
 
 			// re-send ping, recv pong, close conn
-			ping.WriteReadClose(conn, 0, 0)
+			ping.WriteReadClose(conn)
 		}
 	}
 
