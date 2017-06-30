@@ -51,15 +51,12 @@ func getKey(id string) ([]byte, error) {
 	//	tStart := clock.Monotonic.Now()
 	// durationHandshake = tStart.Sub(tHandshake)
 	if id == "clientidFreshKey7890123456789" {
-		sharedKey = ping.ObtainPreSharedKeyFromKA()
-	} else if id == "clientidFastFreshKey123456789" {
-		sharedKey = ping.ObtainAnotherPreSharedKeyFromKA()
+		sharedKey = ping.GetLocalTaoSharedSecret()
 	} else if id == "clientidSameKey67890123456789" {
 		options.FailWhen(sharedKey == nil, "no shared key yet")
 	} else {
 		options.Fail(nil, "no such shared key")
 	}
-	options.FailWhen(sharedKey == nil, "missing key")
 	//	tEnd := clock.Monotonic.Now()
 	//	durationGetKey = tEnd.Sub(tStart)
 	return sharedKey, nil
@@ -92,25 +89,13 @@ func main() {
 		// recv ping, send pong, close conn
 		// ping.ReadWriteClose(conn, func() (int64, int64) { return int64(durationGetKey), 0 })
 		ping.ReadWriteClose(conn, func() (int64, int64, int64) {
-			//fmt.Printf("Trace has %d samples, %d columns, %d repeats\n", T.N, T.Points, T.Repeats)
-			var w, x, y, z time.Time
-			if T.N == 4 {
-				w = T.Samples[T.N-4]
-				x = T.Samples[T.N-3]
-				y = T.Samples[T.N-2]
-				z = T.Samples[T.N-1]
-			} else if T.N == 3 {
-				w = T.Samples[T.N-3]
-				x = T.Samples[T.N-3]
-				y = T.Samples[T.N-2]
-				z = T.Samples[T.N-1]
-			} else if T.N == 2 {
+			// fmt.Printf("Trace has %d samples, %d columns, %d repeats\n", T.N, T.Points, T.Repeats)
+			var w, x time.Time
+			if T.N == 2 {
 				w = T.Samples[T.N-2]
-				x = T.Samples[T.N-2]
-				y = T.Samples[T.N-2]
-				z = T.Samples[T.N-1]
+				x = T.Samples[T.N-1]
 			}
-			return int64(x.Sub(w)), int64(y.Sub(x)), int64(z.Sub(y))
+			return int64(x.Sub(w)), 0, 0
 		})
 	}
 }

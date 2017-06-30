@@ -375,3 +375,26 @@ func ReadWriteClose(conn io.ReadWriteCloser, getData func() (int64, int64, int64
 	err = conn.Close()
 	options.FailIf(err, "closing")
 }
+
+func GetLocalTaoSharedSecret() []byte {
+	options.FailWhen(len(guard.PeerTails) == 0, "-peer_subprin is required")
+
+	g := tao.NewACLGuard()
+
+	for _, p := range guard.PeerTails {
+		peer := auth.Prin{
+			Type:    TaoName.Type,
+			KeyHash: TaoName.KeyHash,
+			Ext:     nil,
+		}
+		peer.Ext = append(peer.Ext, TaoName.Ext[0:2]...)
+		peer.Ext = append(peer.Ext, p.Ext...)
+		g.Authorize(peer, "GetSharedSecret", nil)
+	}
+
+	sharedSecret, err := Parent.GetSharedSecret(30, g)
+	options.FailIf(err, "obtaining psk")
+	// fmt.Printf("shared secret is %v\n", sharedSecret)
+	T.Sample("get psk")
+	return sharedSecret
+}

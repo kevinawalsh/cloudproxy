@@ -1,7 +1,7 @@
 Performance Experiment: Pre-shared Key TLS
 ------------------------------------------
 
-Three tao-hosted processes:
+Two tao-hosted processes:
  attested_psk_client
  attested_psk_server
 Two third-party servers:

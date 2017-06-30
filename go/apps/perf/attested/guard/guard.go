@@ -27,9 +27,9 @@ import (
 	"github.com/jlmucb/cloudproxy/go/util/options"
 )
 
-type prinTailFlags []auth.PrinTail
+type PrinTailFlags []auth.PrinTail
 
-func (f *prinTailFlags) String() string {
+func (f *PrinTailFlags) String() string {
 	var s []string
 	for _, p := range *f {
 		s = append(s, fmt.Sprintf("%v", p))
@@ -37,7 +37,7 @@ func (f *prinTailFlags) String() string {
 	return strings.Join(s, ",")
 }
 
-func (f *prinTailFlags) Set(value string) error {
+func (f *PrinTailFlags) Set(value string) error {
 	buf := bytes.NewBufferString(value)
 	for buf.Len() > 0 {
 		var p auth.PrinTail
@@ -51,10 +51,10 @@ func (f *prinTailFlags) Set(value string) error {
 }
 
 var localTpmAttestation = flag.String("local_tpm_attestation", "", "File containing tpm attestation for this platform")
-var peerTails prinTailFlags
+var PeerTails PrinTailFlags
 
 func init() {
-	flag.Var(&peerTails, "peer_subprin", "Subprincipal extension(s) for peer")
+	flag.Var(&PeerTails, "peer_subprin", "Subprincipal extension(s) for peer")
 }
 
 type AttestationGuard struct {
@@ -74,7 +74,7 @@ func NewAttestationGuard() *AttestationGuard {
 		return Guard
 	}
 	options.FailWhen(*localTpmAttestation == "", "-local_tpm_attestation is required")
-	options.FailWhen(len(peerTails) == 0, "-peer_subprin is required")
+	options.FailWhen(len(PeerTails) == 0, "-peer_subprin is required")
 
 	localName, err := tao.Parent().GetTaoName() // get last part of our name
 	options.FailIf(err, "can't get name")
@@ -86,9 +86,9 @@ func NewAttestationGuard() *AttestationGuard {
 	err = proto.Unmarshal(s, &a)
 	options.FailIf(err, "can't unmarshal peer tpm attestation")
 
-	args := make([]interface{}, len(peerTails))
-	peerExts := make([]auth.SubPrin, len(peerTails))
-	for i, p := range peerTails {
+	args := make([]interface{}, len(PeerTails))
+	peerExts := make([]auth.SubPrin, len(PeerTails))
+	for i, p := range PeerTails {
 		args[i] = p
 		peerExts[i] = p.Ext
 	}
