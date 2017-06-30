@@ -5,8 +5,8 @@ set -o nounset
 
 # Download the latest stable version of the CoreOS image and script to the
 # current directory.
-curl -G http://stable.release.core-os.net/amd64-usr/current/coreos_production_qemu_image.img.bz2 > coreos_production_qemu_image.img.bz2
-curl -G http://stable.release.core-os.net/amd64-usr/current/coreos_production_qemu_image.img.bz2.sig > coreos_production_qemu_image.img.bz2.sig
+#curl -G http://stable.release.core-os.net/amd64-usr/current/coreos_production_qemu_image.img.bz2 > coreos_production_qemu_image.img.bz2
+#curl -G http://stable.release.core-os.net/amd64-usr/current/coreos_production_qemu_image.img.bz2.sig > coreos_production_qemu_image.img.bz2.sig
 
 SCRIPT_PATH="$(readlink -e "$(dirname "$0")")"
 TEMP_FILE=$(mktemp -d /tmp/gnupg.XXXXXX)
