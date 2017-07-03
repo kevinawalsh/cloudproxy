@@ -62,10 +62,10 @@ The simplest demo in CloudProxy consists of a client that sends messages to a
 server and a server that echoes the messages back. This application is
 implemented in `apps/demo`. The demo application requires a security domain and
 a policy that allows the `demo_server` and `demo_client` binaries to run. The
-policy statements in `run/scripts/domain_template.pb` are sufficient if
-CloudProxy is built and installed using `run/scripts/build_standalone.sh`.
+policy statements in `scripts/domain_template.pb` are sufficient if
+CloudProxy is built and installed using `scripts/build_standalone.sh`.
 
-To create a domain, run the `run/scripts/set_up_domain.sh` script and supply the
+To create a domain, run the `scripts/set_up_domain.sh` script and supply the
 name of a guard type: `Datalog`, `ACLs`, or `AllowAll`. The last option (only
 for debugging) creates a guard that returns true for any authorization query.
 The opposite policy `DenyAll` is implemented but doesn't run, since the
@@ -74,29 +74,29 @@ outputs the directory name of a domain that it created. This directory name is
 needed to run the demo. For example, to get a domain with policy based on
 Datalog, run the command
 
-	run/scripts/set_up_domain.sh Datalog Soft
+	scripts/set_up_domain.sh Datalog Soft
 
-The `set_up_domain.sh` script uses `run/scripts/domain_template.pb` to configure
+The `set_up_domain.sh` script uses `scripts/domain_template.pb` to configure
 the domain. This text-format protobuf structure contains rules and paths to
 binaries. Relative paths in the domain template are taken to be relative to
 `${GOPATH}/bin`; absolute paths are also permitted.
 
 There are three demo configurations: Linux processes, Docker containers, and
-KVM/CoreOS virtual machines. These correspond to the `run/scripts/run_*.sh`
+KVM/CoreOS virtual machines. These correspond to the `scripts/run_*.sh`
 scripts. All three scripts require `sudo` privileges (to start `linux_host`) and
 require that the CloudProxy Go binaries were built in for a standalone
 environment and have been installed in `${GOPATH}/bin`. This can be accomplished
-using the script `run/scripts/build_standalone.sh`.
+using the script `scripts/build_standalone.sh`.
 
 Let the generated domain directory be `$TAO_DOMAIN`. Then to start the Linux
 process demo, run the command
 
-	run/scripts/run_processes.sh $TAO_DOMAIN Soft
+	scripts/run_processes.sh $TAO_DOMAIN Soft
 
 The Docker-based demo assumes that `$PATH` contains a Docker binary called
 `docker`. To start the Linux Docker demo, run the command
 
-	run/scripts/run_docker.sh $TAO_DOMAIN ${GOPATH/bin/demo_{client,server}.img.tgz 
+	scripts/run_docker.sh $TAO_DOMAIN ${GOPATH/bin/demo_{client,server}.img.tgz 
 
 The KVM/CoreOS demo assumes that `$PATH` contains a QEMU binary called
 `qemu-system-x86_64`. It also requires a CoreOS virtual-machine image (call it
@@ -106,4 +106,4 @@ a running SSH agent that holds a private key corresponding to one of the keys in
 `vm_paths`. If all these requirements are satisfied, then the Linux KVM/CoreOS
 demo can be started by running the command
 
-	run/scripts/run_kvm.sh $IMG $KEYFILE $TAO_DOMAIN
+	scripts/run_kvm.sh $IMG $KEYFILE $TAO_DOMAIN
