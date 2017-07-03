@@ -15,8 +15,6 @@
 package tao
 
 import (
-	"fmt"
-
 	"github.com/golang/protobuf/proto"
 	"github.com/jlmucb/cloudproxy/go/tao/auth"
 )
@@ -90,11 +88,11 @@ func (t *StackedHost) GetSharedSecret(tag string, n int) (bytes []byte, err erro
 	// the strength of HKDF with a strong key.
 	salt := make([]byte, 8)
 	material := make([]byte, n)
-	fmt.Printf("Deriving %d-byte secret with salt %02x\n", n, salt)
+	// fmt.Printf("Deriving %d-byte secret with salt %02x\n", n, salt)
 	if err := t.keys.DerivingKey.Derive(salt, []byte(tag), material); err != nil {
 		return nil, err
 	}
-	fmt.Printf("Secret is %02x\n", material)
+	// fmt.Printf("Secret is %02x\n", material)
 
 	return material, nil
 }

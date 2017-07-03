@@ -25,7 +25,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"os/signal"
+	// "os/signal"
 	"path"
 	"strconv"
 	"strings"
@@ -604,13 +604,13 @@ func (kcc *KvmCoreOSContainer) Start() (err error) {
 		return
 	}
 	// Reap the child when the process dies.
-	sc := make(chan os.Signal, 1)
-	signal.Notify(sc, syscall.SIGCHLD)
+	// sc := make(chan os.Signal, 1)
+	// signal.Notify(sc, syscall.SIGCHLD)
 	go func() {
-		<-sc
+		// <-sc
 		kcc.QCmd.Wait()
 		kcc.Cleanup()
-		signal.Stop(sc)
+		// signal.Stop(sc)
 		kcc.Done <- true
 		close(kcc.Done) // prevent any more blocking
 	}()
@@ -630,8 +630,9 @@ func (kcc *KvmCoreOSContainer) Start() (err error) {
 		dest := net.JoinHostPort("localhost", strconv.Itoa(kcc.SSHForwardingPort))
 		glog.Info("Connecting to " + dest)
 		conf := &ssh.ClientConfig{
-			User: "core",
-			Auth: []ssh.AuthMethod{ssh.PublicKeys(kcc.Factory.PrivateKey)},
+			User:            "core",
+			Auth:            []ssh.AuthMethod{ssh.PublicKeys(kcc.Factory.PrivateKey)},
+			HostKeyCallback: ssh.InsecureIgnoreHostKey(), // FIXME: put coreos host key here
 		}
 		var client *ssh.Client
 		client, err = ssh.Dial("tcp", dest, conf)
@@ -665,13 +666,13 @@ func (kcc *KvmCoreOSContainer) Start() (err error) {
 			return
 		}
 		// Reap the child when the ssh session dies.
-		sc := make(chan os.Signal, 1)
+		// sc := make(chan os.Signal, 1)
 		go func() {
 			kcc.SCmd.Wait()
 			// Give the guest a moment to shutdown cleanly.
 			<-time.After(3 * time.Second)
 			kcc.Cleanup()
-			signal.Stop(sc)
+			// signal.Stop(sc)
 			kcc.Done <- true
 			close(kcc.Done) // prevent any more blocking
 		}()

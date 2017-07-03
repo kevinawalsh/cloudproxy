@@ -22,7 +22,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
-	"os/signal"
+	// "os/signal"
 	"path"
 	"strings"
 	"syscall"
@@ -239,11 +239,11 @@ func (dc *DockerContainer) Start() (err error) {
 	}
 	// Reap the child when the process dies.
 	go func() {
-		sc := make(chan os.Signal, 1)
-		signal.Notify(sc, syscall.SIGCHLD)
-		<-sc
+		// sc := make(chan os.Signal, 1)
+		// signal.Notify(sc, syscall.SIGCHLD)
+		// <-sc
 		dc.Cmd.Wait()
-		signal.Stop(sc)
+		// signal.Stop(sc)
 
 		time.Sleep(1 * time.Second)
 		docker(nil, "rmi", dc.ImageName)

@@ -23,7 +23,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
-	"os/signal"
+	// "os/signal"
 	"path"
 	"strings"
 	"syscall"
@@ -294,12 +294,12 @@ func (p *HostedProcess) Start() (err error) {
 	}
 
 	// Reap the child when the process dies.
-	sc := make(chan os.Signal, 1)
-	signal.Notify(sc, syscall.SIGCHLD)
+	// sc := make(chan os.Signal, 1)
+	// signal.Notify(sc, syscall.SIGCHLD)
 	go func() {
-		<-sc
+		// <-sc
 		p.Cmd.Wait()
-		signal.Stop(sc)
+		// signal.Stop(sc)
 		os.RemoveAll(p.Tempdir)
 		p.Done <- true
 		close(p.Done) // prevent any more blocking

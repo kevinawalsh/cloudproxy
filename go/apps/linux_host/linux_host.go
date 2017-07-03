@@ -15,10 +15,12 @@
 package main
 
 import (
+	"fmt"
 	"github.com/jlmucb/cloudproxy/go/apps/host"
 )
 
 func main() {
+	fmt.Println("hello world")
 	// TODO(tmroeder): This implementation doesn't currently register any
 	// new Tao implementations, but we should separate out of the TPM Tao
 	// and register it here.

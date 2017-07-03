@@ -23,9 +23,9 @@ function build_docker() {
 	policy_cert="$3"
 	tao_config="$4"
 
-	DEMO_DIR="$(readlink -e "$(dirname "$script_name")")"/../../apps/demo
+	DEMO_DIR="$(readlink -e "$(dirname "$script_name")")"/../../apps
 	TEMP_DIR=$(mktemp -d)
-	cp "${DEMO_DIR}"/${app_name}/Dockerfile ${TEMP_DIR}/Dockerfile
+	cp `find "${DEMO_DIR}" -name ${app_name}`/Dockerfile ${TEMP_DIR}/Dockerfile
 	mkdir ${TEMP_DIR}/tmp
 	mkdir ${TEMP_DIR}/bin
 	WHICH=$(which which)
@@ -43,7 +43,9 @@ function build_docker() {
 
 	tar -C ${TEMP_DIR} -czf "$APP_BIN".img.tgz $(ls ${TEMP_DIR})
 	rm -rf ${TEMP_DIR}
+  echo "built: $APP_BIN".img.tgz
 }
 
 build_docker "$0" demo_server "$TAO_DOMAIN/policy_keys/cert.der" "$TAO_DOMAIN/tao.config"
 build_docker "$0" demo_client "$TAO_DOMAIN/policy_keys/cert.der" "$TAO_DOMAIN/tao.config"
+build_docker "$0" hosted_psk_server "$TAO_DOMAIN/policy_keys/cert.der" "$TAO_DOMAIN/tao.config"

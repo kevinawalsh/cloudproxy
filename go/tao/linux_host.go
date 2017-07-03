@@ -15,6 +15,7 @@
 package tao
 
 import (
+	"fmt"
 	"path"
 	"strings"
 	"sync"
@@ -23,6 +24,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/golang/protobuf/proto"
 	"github.com/jlmucb/cloudproxy/go/tao/auth"
+	"github.com/jlmucb/cloudproxy/go/util"
 )
 
 // A LinuxHost is a Tao host environment in which hosted programs are Linux
@@ -50,9 +52,20 @@ func NewStackedLinuxHost(path string, keyTypes KeyType, guard Guard, hostTao Tao
 		childFactory: childFactory,
 	}
 
+	// FIXME(kwalsh) temporarily disable... we are extending multiple times in
+	// kvm case, when it should be extending just once
+	// FIXME(kwalsh) enable again... now signkey and principal mismatch
+	oldname, _ := hostTao.GetTaoName()
+	glog.Infof("Extending %v", oldname)
+	fmt.Printf("Extending %v\n", oldname)
+	util.Logged(newError("about to extend"))
 	if err := hostTao.ExtendTaoName(guard.Subprincipal()); err != nil {
 		return nil, err
 	}
+	newname, _ := hostTao.GetTaoName()
+	glog.Infof("  now %v", newname)
+	fmt.Printf("  now %v\n", newname)
+	util.Logged(newError("done extending"))
 
 	var k *Keys
 	var err error
@@ -212,8 +225,11 @@ func (lh *LinuxHost) Unseal(child HostedProgram, sealed []byte) ([]byte, string,
 	policy := *lhsb.Policy
 	switch policy {
 	case SealPolicyConservative, SealPolicyDefault:
-		if lhsb.PolicyInfo == nil || child.Subprin().String() != *lhsb.PolicyInfo {
-			return nil, "", newError("principal not authorized for unseal")
+		if lhsb.PolicyInfo == nil {
+			return nil, "", newError("principal not authorized for unseal: sealed bundle is missing policy info")
+		}
+		if child.Subprin().String() != *lhsb.PolicyInfo {
+			return nil, "", newError("principal not authorized for unseal:\n  principal is: %v\n but owner is: %v\n", child.Subprin().String(), *lhsb.PolicyInfo)
 		}
 	case SealPolicyLiberal:
 		// Allow all
@@ -395,32 +411,50 @@ func (lh *LinuxHost) Shutdown() error {
 	}()
 	// If timeout expires before child is done, kill child
 	for _, lph := range lh.hostedPrograms {
+		glog.Infof("Waiting for hosted program %d to stop\n", lph.Pid())
 	childWaitLoop:
 		for {
 			select {
 			case <-lph.WaitChan():
+				glog.Infof("Hosted program %d stopped\n", lph.Pid())
+				break childWaitLoop
+			default:
+				// fall into next select loop
+			}
+			select {
+			case <-lph.WaitChan():
+				glog.Infof("Hosted program %d stopped\n", lph.Pid())
 				break childWaitLoop
 			case <-waiting:
+				glog.Infof("Still waiting for hosted program %d to stop\n", lph.Pid())
 				glog.Infof("Waiting for hosted programs to stop")
 			case <-timeout:
+				glog.Infof("Hosted program %d is taking too long to stop\n", lph.Pid())
 				glog.Infof("Killing hosted program %d, subprincipal %s\n", lph.Pid(), lph.Subprin())
 				if err := lph.Kill(); err != nil {
 					glog.Errorf("Couldn't kill hosted program %d, subprincipal %s: %s\n", lph.Pid(), lph.Subprin(), err)
 				}
+				glog.Infof("Hosted program %d killed, subprincipal %s\n", lph.Pid(), lph.Subprin())
 				break childWaitLoop
 			}
 		}
 	}
+	glog.Infof("Reaping all hosted programs\n")
 	// Reap all children
 	for _, lph := range lh.hostedPrograms {
+		glog.Infof("Reaping hosted program %d\n", lph.Pid())
 		<-lph.WaitChan()
+		glog.Infof("Hosted program %d reaped\n", lph.Pid())
 	}
 	lh.hostedPrograms = nil
 	lh.hpm.Unlock()
 
 	for _, factory := range lh.childFactory {
+		glog.Infof("Cleaning up child factory %v\n", factory)
 		factory.Cleanup()
 	}
+
+	glog.Infof("Shutdown tasks completed\n")
 
 	return nil
 }
