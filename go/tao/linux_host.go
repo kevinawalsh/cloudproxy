@@ -15,7 +15,6 @@
 package tao
 
 import (
-	"fmt"
 	"path"
 	"strings"
 	"sync"
@@ -24,7 +23,6 @@ import (
 	"github.com/golang/glog"
 	"github.com/golang/protobuf/proto"
 	"github.com/jlmucb/cloudproxy/go/tao/auth"
-	"github.com/jlmucb/cloudproxy/go/util"
 )
 
 // A LinuxHost is a Tao host environment in which hosted programs are Linux
@@ -52,20 +50,9 @@ func NewStackedLinuxHost(path string, keyTypes KeyType, guard Guard, hostTao Tao
 		childFactory: childFactory,
 	}
 
-	// FIXME(kwalsh) temporarily disable... we are extending multiple times in
-	// kvm case, when it should be extending just once
-	// FIXME(kwalsh) enable again... now signkey and principal mismatch
-	oldname, _ := hostTao.GetTaoName()
-	glog.Infof("Extending %v", oldname)
-	fmt.Printf("Extending %v\n", oldname)
-	util.Logged(newError("about to extend"))
 	if err := hostTao.ExtendTaoName(guard.Subprincipal()); err != nil {
 		return nil, err
 	}
-	newname, _ := hostTao.GetTaoName()
-	glog.Infof("  now %v", newname)
-	fmt.Printf("  now %v\n", newname)
-	util.Logged(newError("done extending"))
 
 	var k *Keys
 	var err error

@@ -36,7 +36,7 @@ Code
 ====
 
 The `tao` directory holds the Tao implementation, including subdirectories for
-an authorization language (`auth`) and networking (`net`). The `run/scripts`
+an authorization language (`auth`) and networking (`net`). The `scripts`
 directory has scripts that are useful for setting up instances of example
 applications from `apps`. The `util` directory is a library of utilities used by
 the `tao` library.

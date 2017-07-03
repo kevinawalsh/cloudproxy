@@ -28,7 +28,6 @@ import (
 	"syscall"
 	"text/tabwriter"
 
-	"github.com/golang/glog"
 	"github.com/golang/protobuf/proto"
 	"github.com/jlmucb/cloudproxy/go/apps"
 	"github.com/jlmucb/cloudproxy/go/tao"
@@ -108,55 +107,28 @@ func help() {
 func Main() {
 	flag.Usage = help
 	verbose.Set(true)
-	glog.Errorf("still here\n")
-	glog.Flush()
-
-	glog.Errorf("checkpoint init %d\n", 1)
-	glog.Flush()
 
 	// Get options before the command verb
 	flag.Parse()
-	glog.Errorf("checkpoint after flag parse%d\n", 2)
-	glog.Flush()
 	// Get command verb
 	cmd := "help"
 	if flag.NArg() > 0 {
 		cmd = flag.Arg(0)
 	}
-	glog.Errorf("checkpoint after narg%d\n", 3)
-	glog.Flush()
 	// Get options after the command verb
 	if flag.NArg() > 1 {
 		flag.CommandLine.Parse(flag.Args()[1:])
 	}
-	glog.Errorf("checkpoint after narg again %d\n", 4)
-	glog.Flush()
 
 	// Load the domain.
-	glog.Errorf("checkpoint loading domain%d\n", 5)
-	glog.Flush()
 	cpath := path.Join(apps.TaoDomainPath(), "tao.config")
-	glog.Errorf("checkpoint after join %d\n", 6)
-	glog.Flush()
 	domain, err := tao.LoadDomain(cpath, nil)
-	glog.Errorf("checkpoint loaded domain%d\n", 7)
-	glog.Flush()
 	options.FailIf(err, "Can't load domain")
-	glog.Errorf("checkpoint err %d\n", 8)
-	glog.Flush()
 
 	// Set $TAO_DOMAIN so it will be inherited by hosted programs
-	glog.Errorf("checkpoint setting domain %d\n", 9)
-	glog.Flush()
 	os.Unsetenv("TAO_DOMAIN")
-	glog.Errorf("checkpoint unsetted %d\n", 10)
-	glog.Flush()
 	err = os.Setenv("TAO_DOMAIN", apps.TaoDomainPath())
-	glog.Errorf("checkpoint setenv %d\n", 11)
-	glog.Flush()
 	options.FailIf(err, "Can't set $TAO_DOMAIN")
-	glog.Errorf("checkpoint err check %d\n", 12)
-	glog.Flush()
 
 	switch cmd {
 	case "help":
@@ -166,11 +138,7 @@ func Main() {
 	case "show":
 		showHost(domain)
 	case "start":
-		glog.Errorf("checkpoint about to start %d\n", 13)
-		glog.Flush()
 		startHost(domain)
-		glog.Errorf("checkpoint after start %d\n", 14)
-		glog.Flush()
 	case "stop", "shutdown":
 		stopHost(domain)
 	default:
@@ -486,91 +454,39 @@ func daemonize() {
 		}
 		err = daemon.Start()
 		options.FailIf(err, "Can't become daemon")
-		glog.Errorf("Linux Tao Host running as daemon\n")
-		glog.Flush()
 		os.Exit(0)
+		verbose.Printf("Linux Tao Host running as daemon\n")
 	} else {
-		glog.Errorf("Already a session leader?\n")
-		glog.Flush()
+		verbose.Printf("Already a session leader?\n")
 	}
 }
 
 func startHost(domain *tao.Domain) {
 
-	glog.Errorf("checkpoint in start *** %d\n", 15)
-	glog.Flush()
 	if *options.Bool["daemon"] && *options.Bool["foreground"] {
 		options.Usage("Can supply only one of -daemon and -foreground")
-		glog.Errorf("checkpoint in daemon check %d\n", 16)
-		glog.Flush()
 	}
-	glog.Errorf("checkpoint before bool %d\n", 17)
-	glog.Flush()
 	if *options.Bool["daemon"] {
-		glog.Errorf("checkpoint in daemon %d\n", 18)
-		glog.Flush()
-		glog.Errorf("** Going to daemon\n")
-		glog.Flush()
-		glog.Errorf("checkpoint going %d\n", 19)
-		glog.Flush()
-		fmt.Printf("Going to daemon\n")
-		glog.Errorf("checkpoint again %d\n", 20)
-		glog.Flush()
 		daemonize()
-		glog.Errorf("checkpoint dmz %d\n", 21)
-		glog.Flush()
 	}
-	glog.Errorf("checkpoint after dmz%d\n", 22)
-	glog.Flush()
 
 	cfg := configureFromFile()
-	glog.Errorf("checkpoint configed %d\n", 23)
-	glog.Flush()
 	configureFromOptions(cfg)
-	glog.Errorf("checkpoint optioned %d\n", 24)
-	glog.Flush()
 	host, err := loadHost(domain, cfg)
-	glog.Errorf("checkpoint loaded %d\n", 25)
-	glog.Flush()
 	options.FailIf(err, "Can't create host")
-	glog.Errorf("checkpoint not failed %d\n", 26)
-	glog.Flush()
 
 	if *options.String["delegation"] != "" {
 		// dPath := path.Join(hostPath(), *options.String["delegation"])
-		glog.Errorf("checkpoint in delegation %d\n", 27)
-		glog.Flush()
 		dPath := *options.String["delegation"]
-		glog.Errorf("checkpoint after path %d\n", 28)
-		glog.Flush()
 		buf, err := ioutil.ReadFile(dPath)
-		glog.Errorf("checkpoint after readfile %d\n", 29)
-		glog.Flush()
 		options.FailIf(err, "Can't read delegation: %s", dPath)
-		glog.Errorf("checkpoint after err read %d\n", 30)
-		glog.Flush()
 		var delegation tao.Attestation
-		glog.Errorf("checkpoint after att %d\n", 31)
-		glog.Flush()
 		err = proto.Unmarshal(buf, &delegation)
-		glog.Errorf("checkpoint unmar %d\n", 32)
-		glog.Flush()
 		options.FailIf(err, "Can't unmarshal delegation: %s", dPath)
-		glog.Errorf("checkpoint cant unmar %d\n", 33)
-		glog.Flush()
 		host.Host.SetDelegation(&delegation)
-		glog.Errorf("checkpoint set del %d\n", 34)
-		glog.Flush()
 	}
-	glog.Errorf("checkpoint after delegation %d\n", 35)
-	glog.Flush()
 
-	glog.Errorf("checkpoint before admin socket %d\n", 36)
-	glog.Flush()
 	sockPath := path.Join(hostPath(), "admin_socket")
-	glog.Errorf("** Creating admin socket: %s\n", sockPath)
-	glog.Flush()
-	fmt.Printf("Creating admin socket: %s\n", sockPath)
 	// Set the socketPath directory go+rx so tao_launch can access sockPath and
 	// connect to this linux host, even when tao_launch is run as non-root.
 	err = os.Chmod(path.Dir(sockPath), 0755)
@@ -578,24 +494,6 @@ func startHost(domain *tao.Domain) {
 	uaddr, err := net.ResolveUnixAddr("unix", sockPath)
 	options.FailIf(err, "Can't resolve unix socket")
 	sock, err := net.ListenUnix("unix", uaddr)
-	if err != nil {
-		fmt.Printf("Problem listening at %v\n", sockPath)
-		// can we make a file instead?
-		err2 := ioutil.WriteFile(sockPath, []byte("hello world"), 0755)
-		err3 := ioutil.WriteFile(sockPath+"2", []byte("hello again"), 0755)
-		if err2 != nil {
-			fmt.Printf("Can't make a file either\n")
-		} else {
-			fmt.Printf("But we can make a file there\n")
-			// os.Remove(sockPath)
-		}
-		if err3 != nil {
-			fmt.Printf("Can't make another file\n")
-		} else {
-			fmt.Printf("We can make another file there\n")
-			// os.Remove(sockPath)
-		}
-	}
 	options.FailIf(err, "Can't create admin socket")
 	defer sock.Close()
 	err = os.Chmod(sockPath, 0666)
@@ -606,12 +504,8 @@ func startHost(domain *tao.Domain) {
 
 	go func() {
 		verbose.Printf("Linux Tao Service started and waiting for requests\n  HostName: %s\n  SignName: %s\n", host.HostName(), host.SignName())
-		glog.Errorf("Linux Tao Service started and waiting for requests\n  HostName: %s\n  SignName: %s\n", host.HostName(), host.SignName())
-		glog.Flush()
 		err = tao.NewLinuxHostAdminServer(host).Serve(sock)
 		verbose.Printf("Linux Tao Service finished\n")
-		glog.Errorf("Linux Tao Service finished\n")
-		glog.Flush()
 		sock.Close()
 		options.FailIf(err, "Error serving admin requests")
 		os.Exit(0)
@@ -621,8 +515,6 @@ func startHost(domain *tao.Domain) {
 	signal.Notify(c, os.Interrupt, os.Kill, syscall.SIGTERM)
 	<-c
 	verbose.Printf("Linux Tao Service shutting down\n")
-	glog.Errorf("Linux Tao Service shutting down\n")
-	glog.Flush()
 	err = shutdown()
 	if err != nil {
 		sock.Close()
@@ -633,8 +525,6 @@ func startHost(domain *tao.Domain) {
 	// can block here indefinitely. But if we get a second kill signal,
 	// let's abort.
 	verbose.Printf("Waiting for shutdown....\n")
-	glog.Errorf("Waiting for shutdown....\n")
-	glog.Flush()
 	<-c
 	options.Fail(nil, "Could not shut down linux_host")
 }

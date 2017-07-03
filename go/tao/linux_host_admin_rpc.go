@@ -18,7 +18,6 @@ package tao
 // This code is extremely dull and, ideally, would be generated automatically.
 
 import (
-	"fmt"
 	"net"
 	"net/rpc"
 	"os"
@@ -385,7 +384,6 @@ func (server linuxHostAdminServerStub) HostName(r *LinuxHostAdminRPCRequest, s *
 
 // Shutdown is the server stub for LinuxHost.Shutdown.
 func (server linuxHostAdminServerStub) Shutdown(r *LinuxHostAdminRPCRequest, s *LinuxHostAdminRPCResponse) error {
-	fmt.Printf("Host got a shutdown RPC message\n")
 	defer RecoverTPMResources()
 	ucred := server.oob.PeerCred()
 	if ucred == nil {
@@ -397,10 +395,8 @@ func (server linuxHostAdminServerStub) Shutdown(r *LinuxHostAdminRPCRequest, s *
 	if ucred.Uid != 0 && int(ucred.Uid) != os.Geteuid() {
 		return newError("unauthorized: only root or owner can shut down linux_host")
 	}
-	fmt.Printf("Host is about to shutdown\n")
 	err := server.lh.Shutdown()
 	server.Done <- true
 	close(server.Done)
-	fmt.Printf("Shutdown RPC stub finished\n")
 	return err
 }

@@ -31,8 +31,8 @@ All timings taken on client side.
 
 For siblings but with client on root linux (A), server on docker (C)
 
-    ./run/scripts/build_static.sh
-    ./run/scripts/build_docker.sh
+    ./scripts/build_static.sh
+    ./scripts/build_docker.sh
 
     KVM=$(echo -kvm_coreos_img ~/coreos2017/coreos_production_qemu_image.img)
     KEYS=$(echo -kvm_coreos_ssh_auth_keys ~/.ssh/authorized_keys)

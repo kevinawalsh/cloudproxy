@@ -57,23 +57,23 @@ cp "$(gowhich demo_server)" "$(gowhich demo_client)" "$(gowhich tao_launch)" ${L
 # TODO(kwalsh) Mounting host directories seems to be discouraged... use scp?
 chmod a+rx ${LHTEMP}/{demo_server,demo_client,tao_launch}
 
-## # Run tao_launch twice across SSH to start the demo programs. For the ssh
-## # command to work, this session must have an ssh agent with the keys from
-## # ${KEYS}.
-## ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-##   -x -l core -p ${SSHPORT} localhost /media/tao/tao_launch run \
-## 	-host /media/tao/linux_tao_host /media/tao/demo_server \
-## 	-tao_domain /media/tao &
-## echo Waiting for the server to start
-## sleep 2
-## 
-## ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-##   -x -l core -p ${SSHPORT} localhost /media/tao/tao_launch run \
-## 	-host /media/tao/linux_tao_host /media/tao/demo_client \
-## 	-tao_domain /media/tao -host 127.0.0.1 &
-## echo Waiting for the client to run
-## sleep 4
-## 
-## #echo -e "\n\nCleaning up"
-## ## ssh -x -l core -p ${SSHPORT} localhost sudo shutdown -h now
-## #sudo "$TAO" host stop -tao_domain "$TAO_DOMAIN"
+# Run tao_launch twice across SSH to start the demo programs. For the ssh
+# command to work, this session must have an ssh agent with the keys from
+# ${KEYS}.
+ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+  -x -l core -p ${SSHPORT} localhost /media/tao/tao_launch run \
+	-host /etc/tao/linux_tao_host /media/tao/demo_server \
+	-tao_domain /etc/tao &
+echo Waiting for the server to start
+sleep 2
+
+ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+  -x -l core -p ${SSHPORT} localhost /media/tao/tao_launch run \
+	-host /etc/tao/linux_tao_host /media/tao/demo_client \
+	-tao_domain /etc/tao -host 127.0.0.1 &
+echo Waiting for the client to run
+sleep 4
+
+#echo -e "\n\nCleaning up"
+## ssh -x -l core -p ${SSHPORT} localhost sudo shutdown -h now
+#sudo "$TAO" host stop -tao_domain "$TAO_DOMAIN"

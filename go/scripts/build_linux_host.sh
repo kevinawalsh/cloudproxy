@@ -3,7 +3,7 @@
 # This script assumes that the binary for linux_host has been built and
 # installed into a bin path in $GOPATH. For the purposes of KVM/CoreOS, this
 # binary must be executable on the virtual machine. One way to make this easier
-# is to build the binary statically. E.g., see run/scripts/build_standalone.sh.
+# is to build the binary statically. E.g., see scripts/build_standalone.sh.
 
 set -o nounset
 set -o errexit

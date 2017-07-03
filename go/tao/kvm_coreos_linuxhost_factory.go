@@ -473,21 +473,12 @@ func (kcc *KvmCoreOSHostContainer) Start() (err error) {
 	}
 
 	cmds := []string{
-		"echo 'Mounting tao filesystem'",
 		"sudo mkdir /media/tao",
 		"sudo mount -t 9p -o trans=virtio,version=9p2000.L tao /media/tao",
-		"echo 'Setting tao filesystem permissions'",
 		"sudo chmod -R 755 /media/tao",
-		"echo 'Creating /etc/tao'",
 		"sudo rm -rf /etc/tao",
 		"sudo cp -r /media/tao /etc/tao",
-		// "echo 'Testing linux_host'",
-		// "/etc/tao/linux_host start -help",
-		// "echo 'Testing linux_host with sudo'",
-		// "sudo /etc/tao/linux_host start -help",
-		"echo 'Running linux_host with sudo'",
 		"& sudo /etc/tao/linux_host start -foreground -alsologtostderr -verbose -v 4 -stacked -parent_type file -parent_spec 'tao::RPC+tao::FileMessageChannel(/dev/virtio-ports/tao)' -tao_domain /etc/tao",
-		"echo 'Linux host is starting'",
 	}
 
 	glog.Info("Initializing tao host on the guest")
@@ -501,13 +492,13 @@ func (kcc *KvmCoreOSHostContainer) Start() (err error) {
 		init.Stdout = kcc.spec.Stdout
 		init.Stderr = kcc.spec.Stderr
 		if cmd[0] == '&' {
-			fmt.Printf("Starting init command %d of %d: %s\n", i+1, len(cmds), cmd)
+			glog.Infof("Starting init command %d of %d: %s\n", i+1, len(cmds), cmd)
 			if err = init.Start(cmd[2:]); err != nil {
 				init.Close()
 				return fmt.Errorf("error starting init command %d of %d (%s): %s", i+1, len(cmds), cmd[2:], err)
 			}
 		} else {
-			fmt.Printf("Running init command %d of %d: %s\n", i+1, len(cmds), cmd)
+			glog.Infof("Running init command %d of %d: %s\n", i+1, len(cmds), cmd)
 			if err = init.Run(cmd); err != nil {
 				init.Close()
 				return fmt.Errorf("error running init command %d of %d (%s): %s", i+1, len(cmds), cmd, err)
@@ -515,112 +506,11 @@ func (kcc *KvmCoreOSHostContainer) Start() (err error) {
 		}
 		go func() {
 			time.Sleep(20 * time.Second)
-			fmt.Printf("closing init")
 			init.Close()
 		}()
 	}
 
-	/*
-		// We need to run a set of commands to set up the LinuxHost on the
-		// remote system.
-		// Mount the filesystem.
-		glog.Info("Mounting /media/tao on the guest")
-		mount, err := client.NewSession()
-		//mount.Stdin = kcc.spec.Stdin
-		//mount.Stdout = kcc.spec.Stdout
-		//mount.Stderr = kcc.spec.Stderr
-		if err != nil {
-			err = fmt.Errorf("couldn't establish a mount session on SSH: %s", err)
-			return
-		}
-		// Bind for unix domain socket on /media/tao virtio 9p filesystem fails for
-		// unknown reason with ENXIO. Rest of /media is mounted noexec. So copy
-		// files to /etc/tao instead.
-		if err = mount.Run("sudo mkdir /media/tao && sudo mount -t 9p -o trans=virtio,version=9p2000.L tao /media/tao && sudo chmod -R 755 /media/tao"); err != nil {
-			err = fmt.Errorf("couldn't mount the tao filesystem on the guest: %s", err)
-			mount.Close()
-			return
-		}
-		mount.Close()
-
-		cleanup, err := client.NewSession()
-		if err != nil {
-			err = fmt.Errorf("couldn't establish a cleanup session on SSH: %s", err)
-			return
-		}
-		if err = cleanup.Run("sudo rm -rf /etc/tao"); err != nil {
-			err = fmt.Errorf("couldn't cleanup old tao filesystem on the guest: %s", err)
-			// cleanup.Close()
-			// return
-		}
-		cleanup.Close()
-
-		cp, err := client.NewSession()
-		if err != nil {
-			err = fmt.Errorf("couldn't establish a copy session on SSH: %s", err)
-			return
-		}
-
-		if err = cp.Run("sudo cp -r /media/tao /etc/tao"); err != nil {
-			err = fmt.Errorf("couldn't copy the tao filesystem on the guest: %s", err)
-			cp.Close()
-			return
-		}
-		cp.Close()
-
-		for _, test := range []string{"false", "sudo false", "foobar", "sudo foobar", "touch /tmp/foo", "sudo touch /tmp/bar", "sudo /etc/tao/linux_host blah blah blah", "sudo /etc/tao/linux_host -help"} {
-			fmt.Printf("running async: %s\n", test)
-			testing, err := client.NewSession()
-			testing.Stdin = kcc.spec.Stdin
-			testing.Stdout = kcc.spec.Stdout
-			testing.Stderr = kcc.spec.Stderr
-			if err != nil {
-				err = fmt.Errorf("couldn't establish a testing session on SSH: %s", err)
-				continue
-			}
-			if err = testing.Start(test); err != nil {
-				err = fmt.Errorf("couldn't test (%s) on the guest: %s", test, err)
-				// return
-			}
-			testing.Close()
-		}
-		for _, test := range []string{"false", "sudo false", "foobar", "sudo foobar", "touch /tmp/foo", "sudo touch /tmp/bar", "sudo /etc/tao/linux_host blah blah blah", "sudo /etc/tao/linux_host -help"} {
-			fmt.Printf("running sync: %s\n", test)
-			testing, err := client.NewSession()
-			testing.Stdin = kcc.spec.Stdin
-			testing.Stdout = kcc.spec.Stdout
-			testing.Stderr = kcc.spec.Stderr
-			if err != nil {
-				err = fmt.Errorf("couldn't establish a testing session on SSH: %s", err)
-				continue
-			}
-			if err = testing.Run(test); err != nil {
-				err = fmt.Errorf("couldn't test (%s) on the guest: %s", test, err)
-				// return
-			}
-			testing.Close()
-		}
-
-		// Start the linux_host on the container.
-		glog.Info("Starting linux_host on the guest")
-		fmt.Println("Starting linux_host on the guest")
-		start, err := client.NewSession()
-		start.Stdin = kcc.spec.Stdin
-		start.Stdout = kcc.spec.Stdout
-		start.Stderr = kcc.spec.Stderr
-		if err != nil {
-			err = fmt.Errorf("couldn't establish a start session on SSH: %s", err)
-			return
-		}
-		if err = start.Run("sudo /etc/tao/linux_host start -foreground -alsologtostderr -verbose -v 4 -stacked -parent_type file -parent_spec 'tao::RPC+tao::FileMessageChannel(/dev/virtio-ports/tao)' -tao_domain /etc/tao"); err != nil {
-			err = fmt.Errorf("couldn't start linux_host on the guest: %s", err)
-			return
-		}
-		start.Close()
-	*/
-
 	glog.Info("Hosted qemu/coreos/linux_host is ready")
-	fmt.Println("Hosted qemu/coreos/linux_host is ready")
 	return
 }
 
