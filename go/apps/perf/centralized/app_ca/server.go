@@ -40,6 +40,7 @@ func main() {
 	for {
 		conn, err := sock.Accept()
 		options.FailIf(err, "accepting connection")
-		ping.HandleCSR(util.NewMessageStream(conn))
+		ip := conn.RemoteAddr().String()
+		ping.HandleCSR(util.NewMessageStream(conn), ip)
 	}
 }
