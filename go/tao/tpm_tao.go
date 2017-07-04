@@ -187,7 +187,7 @@ func (tt *TPMTao) Rand() io.Reader {
 }
 
 // GetSharedSecret returns a slice of n secret bytes.
-func (tt *TPMTao) GetSharedSecret(n int, policy interface{}) (bytes []byte, err error) {
+func (tt *TPMTao) GetSharedSecret(requester *auth.Prin, n int, policy interface{}, level int) (bytes []byte, err error) {
 	return nil, errors.New("the TPMTao does not implement GetSharedSecret")
 }
 

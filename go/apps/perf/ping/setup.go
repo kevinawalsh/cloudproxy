@@ -46,6 +46,8 @@ var ServerAddr string
 
 var Count = flag.Int("n", 5, "Number of repeat measurements")
 
+var SharedSecretLevel = flag.Int("level", 0, "Levels for GetSharedSecret")
+
 var DomainPathFlag = flag.String("tao_domain", "", "The Tao domain directory")
 var DomainPath string
 var ConfigPath string
@@ -409,9 +411,12 @@ func GetLocalTaoSharedSecret() []byte {
 		peer.Ext = append(peer.Ext, TaoName.Ext[0:2]...)
 		peer.Ext = append(peer.Ext, p.Ext...)
 		g.Authorize(peer, "GetSharedSecret", nil)
+		// fmt.Printf("\nAuthorized: %v\n", peer)
+		// maybe also authorize all of the parents? Or, fix GetSharedSecret
+		// so that we can track original requester as it goes up the chain
 	}
 
-	sharedSecret, err := Parent.GetSharedSecret(30, g)
+	sharedSecret, err := Parent.GetSharedSecret(nil, 30, g, *SharedSecretLevel)
 	options.FailIf(err, "obtaining psk")
 	// fmt.Printf("shared secret is %v\n", sharedSecret)
 	T.Sample("get psk")

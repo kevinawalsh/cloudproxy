@@ -46,6 +46,7 @@ SSHPORT=2222
 echo "Waiting for the virtual machine to start"
 sleep 30
 
+echo "Copying files"
 # Move the binaries to the temporary directory, which is mounted using Plan9P on
 # the virtual machine.
 cp "$(gowhich hosted_psk_server)" "$(gowhich tao_launch)" ${LHTEMP}
@@ -54,8 +55,11 @@ cp "$(gowhich hosted_psk_server)" "$(gowhich tao_launch)" ${LHTEMP}
 # TODO(kwalsh) Mounting host directories seems to be discouraged... use scp?
 chmod a+rx ${LHTEMP}/{hosted_psk_server,tao_launch}
 
+echo "Getting client subprin"
 tao run hosted_psk_client -show_subprin >${LHTEMP}/hosted_psk_client-subprin
 chmod a+r ${LHTEMP}/*-subprin
+
+exit
 
 SSH="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
   -x -l core -p ${SSHPORT} localhost"
@@ -64,16 +68,20 @@ KVM_RUN="$SSH /media/tao/tao_launch run \
 # Run tao_launch across SSH to start the server program. For the ssh
 # command to work, this session must have an ssh agent with the keys from
 # ${KEYS}.
-$KVM_RUN /media/tao/hosted_psk_server -save_subprin /tmp/hosted_psk_server-subprin
+echo "Getting server subprin"
+$KVM_RUN -disown /media/tao/hosted_psk_server -save_subprin /tmp/hosted_psk_server-subprin
+sleep 2
 $SSH sudo cp /tmp/hosted_psk_server-subprin /media/tao/
 $SSH sudo chmod a+r '/media/tao/*-subprin'
 
-$KVM_RUN /media/tao/hosted_psk_server -host 0.0.0.0 -n 1001 -peer_subprin "\"`cat $LHTEMP/*-subprin`\"" &
+echo "Launching server"
+$KVM_RUN -disown /media/tao/hosted_psk_server -level 1 -host 0.0.0.0 -n 1001 -peer_subprin "\"`cat $LHTEMP/*-subprin`\""
 echo Waiting for the server to start
 sleep 2
 
-tao run hosted_psk_client -port 18123 -n 1001 -peer_subprin "`cat $LHTEMP/*-subprin`"
+echo "Launching client"
+tao run hosted_psk_client -level 0 -port 18123 -n 1001 -peer_subprin "`cat $LHTEMP/*-subprin`"
 
-echo -e "\n\nCleaning up"
-$SSH sudo shutdown -h now
-sudo "$TAO" host stop -tao_domain "$TAO_DOMAIN"
+#echo -e "\n\nCleaning up"
+#$SSH sudo shutdown -h now
+#sudo "$TAO" host stop -tao_domain "$TAO_DOMAIN"

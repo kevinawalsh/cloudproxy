@@ -111,8 +111,17 @@ func (lh *LinuxHost) GetRandomBytes(child HostedProgram, n int) ([]byte, error) 
 }
 
 // GetSharedSecret returns a slice of n secret bytes for the child.
-func (lh *LinuxHost) GetSharedSecret(child HostedProgram, n int, policy string) ([]byte, error) {
+func (lh *LinuxHost) GetSharedSecret(child HostedProgram, requester *auth.Prin, n int, policy string, level int) ([]byte, error) {
 	// Compute a tag based on the policy identifier and the child's subprin.
+	if level < 0 {
+		return nil, newError("invalid level %d for shared secret", level)
+	}
+	childName := lh.GetTaoName(child)
+	if requester == nil {
+		requester = &childName
+	} else if !auth.SubprinOrIdentical(requester, childName) {
+		return nil, newError("requester is not identical to or subprincipal of hosted child")
+	}
 	var tag string
 	switch policy {
 	case SharedSecretPolicyDefault, SharedSecretPolicyConservative:
@@ -123,7 +132,10 @@ func (lh *LinuxHost) GetSharedSecret(child HostedProgram, n int, policy string) 
 		// LinuxHost.
 		// TODO(kwalsh) conservative policy could include PID or other
 		// child info.
-		tag = policy + "|" + child.Subprin().String()
+		if level != 0 {
+			return nil, newError("default and conservative policy are only sensible with level 0 shared secrets")
+		}
+		tag = policy + "|" + requester.SubprinSuffix(len(requester.Ext)-len(lh.Host.HostName().Ext)).String()
 	case SharedSecretPolicyLiberal:
 		// The most liberal we can do is allow any hosted process
 		// running on a similar LinuxHost instance.
@@ -147,14 +159,15 @@ func (lh *LinuxHost) GetSharedSecret(child HostedProgram, n int, policy string) 
 		} else {
 			return nil, newError("policy not supported for GetSharedSecret: " + policy)
 		}
-		prin := lh.GetTaoName(child)
 		// TODO(kwalsh) support named secrets
-		if !guard.IsAuthorized(prin, "GetSharedSecret", nil) {
+		if !guard.IsAuthorized(*requester, "GetSharedSecret", nil) {
+			glog.Errorf("Requester not authorized under given policy...\n Requester: %v\n Policy: %v\n",
+				requester, guard)
 			return nil, newError("denied")
 		}
 		tag = policy
 	}
-	return lh.Host.GetSharedSecret(tag, n)
+	return lh.Host.GetSharedSecret(requester, policy, tag, n, level)
 }
 
 // Seal encrypts data for the child. This call also zeroes the data parameter.

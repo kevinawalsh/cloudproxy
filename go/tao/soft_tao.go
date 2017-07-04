@@ -89,9 +89,18 @@ func (s *SoftTao) Rand() io.Reader {
 }
 
 // GetSharedSecret returns a slice of n secret bytes.
-func (s *SoftTao) GetSharedSecret(n int, policy interface{}) ([]byte, error) {
+func (s *SoftTao) GetSharedSecret(requester *auth.Prin, n int, policy interface{}, level int) ([]byte, error) {
+	child := s.name.MakeSubprincipal(s.nameExtension)
+	if requester == nil {
+		requester = &child
+	} else if !auth.SubprinOrIdentical(requester, child) {
+		return nil, newError("Invalid requester in GetSharedSecret: %s may not get shared secret for for %s", child, requester)
+	}
 	if policy != SharedSecretPolicyDefault {
 		return nil, newError("SoftTao policies not yet implemented")
+	}
+	if level != 0 {
+		return nil, newError("SoftTao has no parent")
 	}
 
 	// TODO(tmroeder): for now, we're using a fixed zero salt and counting on

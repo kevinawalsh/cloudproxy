@@ -74,7 +74,11 @@ func (t *RootHost) GetRandomBytes(childSubprin auth.SubPrin, n int) (bytes []byt
 }
 
 // GetSharedSecret returns a slice of n secret bytes.
-func (t *RootHost) GetSharedSecret(tag string, n int) (bytes []byte, err error) {
+func (t *RootHost) GetSharedSecret(requester *auth.Prin, policy, tag string, n, level int) (bytes []byte, err error) {
+	if level > 0 {
+		return nil, newError("RootHost can't generate level %d shared secrets", level)
+	}
+
 	if t.keys.DerivingKey == nil {
 		return nil, newError("this RootHost does not implement shared secrets")
 	}

@@ -63,7 +63,7 @@ func testTaoHostRandomBytes(t *testing.T, th Host) {
 
 func testTaoHostSharedSecretFailure(t *testing.T, th Host) {
 	tag := "test tag"
-	_, err := th.GetSharedSecret(tag, 10)
+	_, err := th.GetSharedSecret(nil, tag, 10, 0)
 	if err == nil {
 		t.Fatal("A Host that doesn't support shared secrets created one")
 	}

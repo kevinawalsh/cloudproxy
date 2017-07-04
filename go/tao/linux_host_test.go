@@ -132,12 +132,12 @@ func DoTestLinuxHostHandleGetRandomBytes(lh *LinuxHost) error {
 }
 
 func DoTestLinuxHostHandleGetSharedSecret(lh *LinuxHost) error {
-	b, err := lh.GetSharedSecret(testChildLH, 10, SharedSecretPolicyDefault)
+	b, err := lh.GetSharedSecret(testChildLH, nil, 10, SharedSecretPolicyDefault, 0)
 	if err != nil {
 		return fmt.Errorf("Couldn't get a shared secret from the Linux host: %s", err)
 	}
 
-	b2, err := lh.GetSharedSecret(testChildLH, 10, SharedSecretPolicyDefault)
+	b2, err := lh.GetSharedSecret(testChildLH, nil, 10, SharedSecretPolicyDefault, 0)
 	if err != nil {
 		return fmt.Errorf("Couldn't get a second shared secret from the Linux host: %s", err)
 	}

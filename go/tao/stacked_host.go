@@ -78,8 +78,12 @@ func (t *StackedHost) GetRandomBytes(childSubprin auth.SubPrin, n int) (bytes []
 }
 
 // GetSharedSecret returns a slice of n secret bytes.
-func (t *StackedHost) GetSharedSecret(tag string, n int) (bytes []byte, err error) {
-	if t.keys == nil || t.keys.DerivingKey == nil {
+func (t *StackedHost) GetSharedSecret(requester *auth.Prin, policy, tag string, n, level int) (bytes []byte, err error) {
+	if level > 0 {
+		return t.hostTao.GetSharedSecret(requester, n, policy, level-1)
+	}
+
+	if level == 0 && (t.keys == nil || t.keys.DerivingKey == nil) {
 		// TODO(tmroeder): this should be implemented using the underlying host
 		return nil, newError("this StackedHost does not yet implement shared secrets")
 	}

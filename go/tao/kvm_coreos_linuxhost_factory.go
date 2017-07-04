@@ -515,10 +515,11 @@ func (kcc *KvmCoreOSHostContainer) Start() (err error) {
 				return fmt.Errorf("error running init command %d of %d (%s): %s", i+1, len(cmds), cmd, err)
 			}
 		}
-		go func() {
+		go func(i, n int) {
 			time.Sleep(20 * time.Second)
+			glog.Info("cleaning up init session %d of %d", i+1, n)
 			init.Close()
-		}()
+		}(i, len(cmds))
 	}
 
 	glog.Info("Hosted qemu/coreos/linux_host is ready")

@@ -83,10 +83,21 @@ func (server linuxHostTaoServerStub) GetSharedSecret(r *RPCRequest, s *RPCRespon
 	if r.Size == nil || *r.Size <= 0 {
 		return newError("invalid size")
 	}
+	if r.Level == nil || *r.Level < 0 {
+		return newError("invalid level")
+	}
 	if r.Policy == nil {
 		return newError("missing policy")
 	}
-	data, err := server.lh.GetSharedSecret(server.child, int(*r.Size), *r.Policy)
+	var requester *auth.Prin
+	if r.Issuer != nil {
+		p, err := auth.UnmarshalPrin(r.Issuer)
+		if err != nil {
+			return err
+		}
+		requester = &p
+	}
+	data, err := server.lh.GetSharedSecret(server.child, requester, int(*r.Size), *r.Policy, int(*r.Level))
 	s.Data = data
 	return err
 }

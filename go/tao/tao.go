@@ -74,8 +74,11 @@ type Tao interface {
 
 	// GetSharedSecret returns a slice of n secret bytes.
 	// TODO(kwalsh) policy should really be a guard, but we still want to
-	// support the "self" policy, and we don't yet have a guard for that.
-	GetSharedSecret(n int, policy interface{}) (bytes []byte, err error)
+	// support the "self" policy, and we don't yet have a guard for that. If
+	// level is zero the host tao will generate the secret directly. If level is
+	// positive, the If level is positive, the call will be passed up that many
+	// levels to an ancester host tao, after suitable authorization checks.
+	GetSharedSecret(requester *auth.Prin, n int, policy interface{}, level int) (bytes []byte, err error)
 
 	// Attest requests the Tao host sign a statement on behalf of the caller. The
 	// optional issuer, time and expiration will be given default values if nil.

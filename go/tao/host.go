@@ -33,8 +33,11 @@ type Host interface {
 	// GetRandomBytes returns a slice of n random bytes.
 	GetRandomBytes(childSubprin auth.SubPrin, n int) (bytes []byte, err error)
 
-	// GetSharedSecret returns a slice of n secret bytes.
-	GetSharedSecret(tag string, n int) (bytes []byte, err error)
+	// GetSharedSecret returns a slice of n secret bytes. If level is zero the
+	// host tao should generate the secret directly. If level is positive, the
+	// call should be passed up that many levels to an ancester host tao.
+	GetSharedSecret(requester *auth.Prin, policy,
+		tag string, n int, level int) (bytes []byte, err error)
 
 	// Attest requests the Tao host sign a statement on behalf of a child. The
 	// issuer can be the child (or nil) or a subprincipal of child, in which

@@ -382,6 +382,12 @@ func SubprinOrIdentical(child, parent Term) bool {
 	return true
 }
 
+// SubprinSuffix returns the last n components of the principal as a
+// subprincipal.
+func (t Prin) SubprinSuffix(n int) SubPrin {
+	return SubPrin(t.Ext[len(t.Ext)-n:])
+}
+
 // MakeSubprincipal creates principal p.e... given principal p and extensions e.
 func (t Prin) MakeSubprincipal(e SubPrin) Prin {
 	other := Prin{Type: t.Type, KeyHash: t.KeyHash, Ext: append([]PrinExt{}, t.Ext...)}
