@@ -102,6 +102,15 @@ func (server linuxHostTaoServerStub) GetSharedSecret(r *RPCRequest, s *RPCRespon
 	return err
 }
 
+// SetFederatedSharedSecret is the server stub for Tao.SetFederatedSharedSecret.
+func (server linuxHostTaoServerStub) SetFederatedSharedSecret(r *RPCRequest, s *RPCResponse) error {
+	if r.Level == nil || *r.Level < 0 {
+		return newError("invalid level")
+	}
+	err := server.lh.SetFederatedSharedSecret(r.Data, int(*r.Level))
+	return err
+}
+
 // Seal is the server stub for Tao.Seal.
 func (server linuxHostTaoServerStub) Seal(r *RPCRequest, s *RPCResponse) error {
 	if r.Policy == nil {

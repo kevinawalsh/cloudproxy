@@ -116,6 +116,12 @@ func (s *SoftTao) GetSharedSecret(requester *auth.Prin, n int, policy interface{
 	return material, nil
 }
 
+// SetFederatedSharedSecret sets the deriving key material.
+func (s *SoftTao) SetFederatedSharedSecret(bytes []byte, level int) error {
+	s.keys.DerivingKey.secret = bytes
+	return nil
+}
+
 // Seal encrypts the data in a way that can only be opened by the Tao for the
 // program that sealed it.  In the case of the SoftTao, this policy is
 // implicit.

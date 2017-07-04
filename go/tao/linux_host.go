@@ -170,6 +170,11 @@ func (lh *LinuxHost) GetSharedSecret(child HostedProgram, requester *auth.Prin, 
 	return lh.Host.GetSharedSecret(requester, policy, tag, n, level)
 }
 
+// SetFederatedSharedSecret returns a slice of n secret bytes for the child.
+func (lh *LinuxHost) SetFederatedSharedSecret(bytes []byte, level int) error {
+	return lh.Host.SetFederatedSharedSecret(bytes, level)
+}
+
 // Seal encrypts data for the child. This call also zeroes the data parameter.
 func (lh *LinuxHost) Seal(child HostedProgram, data []byte, policy string) ([]byte, error) {
 	defer ZeroBytes(data)

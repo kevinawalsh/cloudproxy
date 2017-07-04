@@ -93,6 +93,20 @@ func (t *RootHost) GetSharedSecret(requester *auth.Prin, policy, tag string, n, 
 	return material, nil
 }
 
+// SetFederatedSharedSecret sets the deriving key material.
+func (t *RootHost) SetFederatedSharedSecret(bytes []byte, level int) error {
+	if level > 0 {
+		return newError("RootHost can't federate level %d shared secrets", level)
+	}
+
+	if t.keys.DerivingKey == nil {
+		return newError("this RootHost does not implement shared secrets")
+	}
+
+	t.keys.DerivingKey.secret = bytes
+	return nil
+}
+
 // Attest requests the Tao host sign a statement on behalf of a child.
 func (t *RootHost) Attest(childSubprin auth.SubPrin, issuer *auth.Prin,
 	time, expiration *int64, message auth.Form) (*Attestation, error) {

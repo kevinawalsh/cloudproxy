@@ -39,6 +39,10 @@ type Host interface {
 	GetSharedSecret(requester *auth.Prin, policy,
 		tag string, n int, level int) (bytes []byte, err error)
 
+	// SetFederatedSharedSecret sets the deriving key material for this host or,
+	// if level is positive, some ancestor host.
+	SetFederatedSharedSecret(bytes []byte, level int) error
+
 	// Attest requests the Tao host sign a statement on behalf of a child. The
 	// issuer can be the child (or nil) or a subprincipal of child, in which
 	// case child is not used except for checking that child is indeed a parent

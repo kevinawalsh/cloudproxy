@@ -82,8 +82,7 @@ func (t *StackedHost) GetSharedSecret(requester *auth.Prin, policy, tag string, 
 	if level > 0 {
 		return t.hostTao.GetSharedSecret(requester, n, policy, level-1)
 	}
-
-	if level == 0 && (t.keys == nil || t.keys.DerivingKey == nil) {
+	if t.keys == nil || t.keys.DerivingKey == nil {
 		// TODO(tmroeder): this should be implemented using the underlying host
 		return nil, newError("this StackedHost does not yet implement shared secrets")
 	}
@@ -99,6 +98,19 @@ func (t *StackedHost) GetSharedSecret(requester *auth.Prin, policy, tag string, 
 	// fmt.Printf("Secret is %02x\n", material)
 
 	return material, nil
+}
+
+// SetFederatedSharedSecret sets the deriving key material.
+func (t *StackedHost) SetFederatedSharedSecret(bytes []byte, level int) error {
+	if level > 0 {
+		return t.hostTao.SetFederatedSharedSecret(bytes, level)
+	}
+	if t.keys == nil || t.keys.DerivingKey == nil {
+		// TODO(tmroeder): this should be implemented using the underlying host
+		return newError("this StackedHost does not yet implement shared secrets")
+	}
+	t.keys.DerivingKey.secret = bytes
+	return nil
 }
 
 // Attest requests the Tao host sign a statement on behalf of a child.

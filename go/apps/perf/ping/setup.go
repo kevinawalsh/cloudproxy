@@ -47,6 +47,7 @@ var ServerAddr string
 var Count = flag.Int("n", 5, "Number of repeat measurements")
 
 var SharedSecretLevel = flag.Int("level", 0, "Levels for GetSharedSecret")
+var Federated = flag.Bool("federated", false, "Use federated shared secrets")
 
 var DomainPathFlag = flag.String("tao_domain", "", "The Tao domain directory")
 var DomainPath string
@@ -148,6 +149,11 @@ func ParseFlags(requiresTao bool) {
 
 	Domain, err = tao.LoadDomain(ConfigPath, nil)
 	options.FailIf(err, "can't load Tao domain")
+
+	if *Federated {
+		err = Parent.SetFederatedSharedSecret([]byte("todoTODOtodoTODOtodoTODO"), *SharedSecretLevel)
+		options.FailIf(err, "can't federate at given level")
+	}
 }
 
 func AttestedListen(addr string) *tao.Listener {

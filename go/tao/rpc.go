@@ -214,6 +214,16 @@ func (t *RPC) GetSharedSecret(requester *auth.Prin, n int, policy interface{}, l
 	return bytes, err
 }
 
+// SetFederatedSharedSecret implements part of the Tao interface.
+func (t *RPC) SetFederatedSharedSecret(bytes []byte, level int) error {
+	r := &RPCRequest{
+		Data:  bytes,
+		Level: proto.Int32(int32(level)),
+	}
+	_, _, err := t.call(t.serviceName+".SetFederatedSharedSecret", r, wantNothing)
+	return err
+}
+
 // Attest implements part of the Tao interface.
 func (t *RPC) Attest(issuer *auth.Prin, time, expiration *int64, message auth.Form) (*Attestation, error) {
 	var issuerBytes []byte

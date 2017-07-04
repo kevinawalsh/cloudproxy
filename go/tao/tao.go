@@ -80,6 +80,11 @@ type Tao interface {
 	// levels to an ancester host tao, after suitable authorization checks.
 	GetSharedSecret(requester *auth.Prin, n int, policy interface{}, level int) (bytes []byte, err error)
 
+	// SetFederatedSharedSecret temporarily sets the shared master secret used
+	// by one of the ancestor hosts, according to level.
+	// TODO(kwalsh) require domain authorization here
+	SetFederatedSharedSecret(bytes []byte, level int) error
+
 	// Attest requests the Tao host sign a statement on behalf of the caller. The
 	// optional issuer, time and expiration will be given default values if nil.
 	// TODO(kwalsh) Maybe create a struct for these optional params? Or use

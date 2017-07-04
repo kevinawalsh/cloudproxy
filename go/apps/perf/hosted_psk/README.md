@@ -46,3 +46,10 @@ For siblings but with client on root linux (A), server on docker (C)
     tao run docker:/home/kwalsh/src/go/bin/hosted_psk_server.img.tgz -p 8123:8123 -- -n 1001 -peer_subprin "`cat /tmp/*-subprin`"
     tao run hosted_psk_client -n 1001 -peer_subprin "`cat /tmp/*-subprin`"
 
+For cousins, with client on root linux (A), server on tao-over-kvm-coreos (D)
+
+    see top_to_kvm.sh
+
+For federated
+
+    use -federated flag

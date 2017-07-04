@@ -191,6 +191,11 @@ func (tt *TPMTao) GetSharedSecret(requester *auth.Prin, n int, policy interface{
 	return nil, errors.New("the TPMTao does not implement GetSharedSecret")
 }
 
+// SetFederatedSharedSecret is not possible for TPM tao.
+func (tt *TPMTao) SetFederatedSharedSecret(bytes []byte, level int) error {
+	return errors.New("the TPMTao does not implement SetFederatedSharedSecret")
+}
+
 // Attest requests the Tao host sign a statement on behalf of a caller. The
 // optional issuer, time and expiration will be given default values if nil.
 func (tt *TPMTao) Attest(issuer *auth.Prin, start, expiration *int64, message auth.Form) (*Attestation, error) {
