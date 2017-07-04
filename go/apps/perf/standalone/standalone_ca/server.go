@@ -43,9 +43,10 @@ func main() {
 	defer sock.Close()
 	fmt.Printf("Listening at %s using unauthenticated TCP channels\n", ping.StandaloneAppCAAddr)
 
-	for {
+	for i := 0; i < *ping.Count || *ping.Count < 0; i++ { // negative means forever
 		conn, err := sock.Accept()
 		options.FailIf(err, "accepting connection")
-		ping.HandleCSR(util.NewMessageStream(conn))
+		ip := conn.RemoteAddr().String()
+		ping.HandleCSR(util.NewMessageStream(conn), ip)
 	}
 }

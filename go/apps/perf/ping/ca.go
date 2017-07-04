@@ -20,6 +20,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/binary"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"strings"
@@ -115,7 +116,7 @@ func InitCA() {
 
 var CertificatesIssued int
 
-func HandleCSR(conn util.MessageStream) {
+func HandleCSR(conn util.MessageStream, remoteIP string) {
 	defer conn.Close()
 	var req taoca.Request
 	if err := conn.ReadMessage(&req); err != nil {
@@ -141,6 +142,7 @@ func HandleCSR(conn util.MessageStream) {
 		doError(conn, nil, taoca.ResponseStatus_TAOCA_BAD_REQUEST, errmsg)
 		return
 	}
+	ip := net.ParseIP(remoteIP)
 
 	var ck tao.CryptoKey
 	if err := proto.Unmarshal(req.CSR.PublicKey, &ck); err != nil {
@@ -188,6 +190,7 @@ func HandleCSR(conn util.MessageStream) {
 	}
 
 	template := caKeys.SigningKey.X509Template(NewX509Name(name), ext)
+	template.IPAddresses = []net.IP{ip}
 	template.IsCA = *req.CSR.IsCa
 	template.SerialNumber.SetInt64(serial)
 	cert, err := caKeys.CreateSignedX509(subjectKey, template, "default")
