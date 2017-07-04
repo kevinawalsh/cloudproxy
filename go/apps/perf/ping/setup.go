@@ -22,6 +22,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"os"
 	"path"
@@ -54,6 +55,9 @@ var TaoName auth.Prin
 
 var ShowName = flag.Bool("show_name", false, "Show local principal name, no tests")
 var ShowSubprin = flag.Bool("show_subprin", false, "Show local subprincipal extension name, no tests")
+
+var SaveName = flag.String("save_name", "", "Save local principal name to file, no tests")
+var SaveSubprin = flag.String("save_subprin", "", "Show local subprincipal extension name, no tests")
 
 var AppCAHost = flag.String("appcahost", "localhost", "Attested App CA server host")
 var AppCAPort = flag.String("appcaport", "8127", "Attested App CA server port")
@@ -105,13 +109,28 @@ func ParseFlags(requiresTao bool) {
 	var err error
 	TaoName, err = Parent.GetTaoName()
 	options.FailIf(err, "can't get Tao name")
+	TaoTail := auth.PrinTail{TaoName.Ext[2:]}
 
+	exit := false
 	if *ShowName {
 		fmt.Printf("%s\n", TaoName)
-		os.Exit(0)
-	} else if *ShowSubprin {
-		ext := TaoName.Ext[2:]
-		fmt.Printf("%s\n", auth.PrinTail{ext})
+		exit = true
+	}
+	if *ShowSubprin {
+		fmt.Printf("%s\n", TaoTail)
+		exit = true
+	}
+	if SaveName != nil && *SaveName != "" {
+		err := ioutil.WriteFile(*SaveName, []byte(fmt.Sprintf("%s\n", TaoName)), 0666)
+		options.FailIf(err, "can't write file")
+		exit = true
+	}
+	if SaveSubprin != nil && *SaveSubprin != "" {
+		err := ioutil.WriteFile(*SaveSubprin, []byte(fmt.Sprintf("%s\n", TaoTail)), 0666)
+		options.FailIf(err, "can't write file")
+		exit = true
+	}
+	if exit {
 		os.Exit(0)
 	}
 

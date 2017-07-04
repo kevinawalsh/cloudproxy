@@ -23,9 +23,9 @@ function build_docker() {
 	policy_cert="$3"
 	tao_config="$4"
 
-	DEMO_DIR="$(readlink -e "$(dirname "$script_name")")"/../../apps
+	APPS_DIR="$(readlink -e "$(dirname "$script_name")")"/../apps
 	TEMP_DIR=$(mktemp -d)
-	cp `find "${DEMO_DIR}" -name ${app_name}`/Dockerfile ${TEMP_DIR}/Dockerfile
+	cp `find "${APPS_DIR}" -name ${app_name}`/Dockerfile ${TEMP_DIR}/Dockerfile
 	mkdir ${TEMP_DIR}/tmp
 	mkdir ${TEMP_DIR}/bin
 	WHICH=$(which which)

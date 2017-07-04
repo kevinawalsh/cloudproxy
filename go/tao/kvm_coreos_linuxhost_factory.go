@@ -187,7 +187,9 @@ func (kcc *KvmCoreOSHostContainer) startVM() error {
 		"-machine", "accel=kvm:tcg",
 		// Networking.
 		"-net", "nic,vlan=0,model=virtio",
-		"-net", "user,vlan=0,hostfwd=tcp::" + kcc.spec.Args[2] + "-:22,hostname=" + cfg.Name,
+		// FIXME(kwalsh) 8123 port forwarding should come from extra args passed on
+		// command line
+		"-net", "user,vlan=0,hostfwd=tcp::" + kcc.spec.Args[2] + "-:22,hostfwd=tcp::18123-:8123,hostname=" + cfg.Name,
 		// Tao communications through virtio-serial. With this
 		// configuration, QEMU waits for a server on cfg.SocketPath,
 		// then connects to it.
@@ -210,6 +212,15 @@ func (kcc *KvmCoreOSHostContainer) startVM() error {
 	//qemuArgs = append(qemuArgs, kcc.spec.Args...)
 
 	glog.Info("Launching qemu/coreos")
+	dbg := qemuProg
+	for i, arg := range qemuArgs {
+		if i%2 == 0 {
+			dbg += " \\\n    " + arg
+		} else {
+			dbg += " " + arg
+		}
+	}
+	glog.Infof("Using command:\n%s\n", dbg)
 	kcc.QCmd = exec.Command(qemuProg, qemuArgs...)
 	// Don't connect QEMU/KVM to any of the current input/output channels,
 	// since we'll connect over SSH.
@@ -519,7 +530,7 @@ func (kcc *KvmCoreOSHostContainer) Cleanup() error {
 	if kcc.TaoChannel != nil {
 		kcc.TaoChannel.Close()
 	}
-	os.RemoveAll(kcc.Tempdir)
-	os.RemoveAll(kcc.LHPath)
+	// os.RemoveAll(kcc.Tempdir)
+	// os.RemoveAll(kcc.LHPath)
 	return nil
 }
