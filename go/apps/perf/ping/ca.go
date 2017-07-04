@@ -142,7 +142,12 @@ func HandleCSR(conn util.MessageStream, remoteIP string) {
 		doError(conn, nil, taoca.ResponseStatus_TAOCA_BAD_REQUEST, errmsg)
 		return
 	}
-	ip := net.ParseIP(remoteIP)
+	tcpaddr, err := net.ResolveTCPAddr("tcp", remoteIP)
+	if err != nil {
+		doError(conn, err, taoca.ResponseStatus_TAOCA_BAD_REQUEST, "can't get remote ip")
+		return
+	}
+	ip := tcpaddr.IP
 
 	var ck tao.CryptoKey
 	if err := proto.Unmarshal(req.CSR.PublicKey, &ck); err != nil {
