@@ -38,3 +38,6 @@ All timings taken on client side.
      standalone_ca_server -n 1001
      standalone_ca_client -n 1001
      offline_ca_client -n 1001
+     standalone_ca_client -n 1001 -reconnect # the reconnect should be like offline
+     standalone_ca_client -n 1001 -reconnect # the reconnect+resume should be faster than offline
+

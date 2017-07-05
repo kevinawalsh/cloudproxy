@@ -14,4 +14,6 @@ All timings taken on client side.
 
     standalone_psk_server -n 1001
     standalone_psk_client -n 1001
+    standalone_psk_client -n 1001 -reconnect
+    standalone_psk_client -n 1001 -reconnect -tls_resume
 

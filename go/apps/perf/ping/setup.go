@@ -56,6 +56,7 @@ var Domain *tao.Domain
 var Parent tao.Tao
 var TaoName auth.Prin
 
+var NameBase = flag.Int("name_base", 1, "Use 1 for soft tao, 2 for tpm, etc.")
 var ShowName = flag.Bool("show_name", false, "Show local principal name, no tests")
 var ShowSubprin = flag.Bool("show_subprin", false, "Show local subprincipal extension name, no tests")
 
@@ -112,7 +113,7 @@ func ParseFlags(requiresTao bool) {
 	var err error
 	TaoName, err = Parent.GetTaoName()
 	options.FailIf(err, "can't get Tao name")
-	TaoTail := auth.PrinTail{TaoName.Ext[2:]}
+	TaoTail := auth.PrinTail{TaoName.Ext[*NameBase:]}
 
 	exit := false
 	if *ShowName {
@@ -414,7 +415,7 @@ func GetLocalTaoSharedSecret() []byte {
 			KeyHash: TaoName.KeyHash,
 			Ext:     nil,
 		}
-		peer.Ext = append(peer.Ext, TaoName.Ext[0:2]...)
+		peer.Ext = append(peer.Ext, TaoName.Ext[0:*NameBase]...)
 		peer.Ext = append(peer.Ext, p.Ext...)
 		g.Authorize(peer, "GetSharedSecret", nil)
 		// fmt.Printf("\nAuthorized: %v\n", peer)
