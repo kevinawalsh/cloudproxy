@@ -26,13 +26,13 @@ package main
 
 import (
 	"crypto/x509/pkix"
-	"fmt"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/jlmucb/cloudproxy/go/tao"
 	"github.com/jlmucb/cloudproxy/go/tao/auth"
 	"github.com/jlmucb/cloudproxy/go/util"
 	"github.com/jlmucb/cloudproxy/go/util/options"
+	"github.com/jlmucb/cloudproxy/go/util/verbose"
 )
 
 var opts = []options.Option{
@@ -81,9 +81,9 @@ func main() {
 	aasub := aa.MakeSubprincipal(auth.SubPrin([]auth.PrinExt{auth.MakePrinExt("tpm", id)}))
 	tpm := name.Parent()
 
-	fmt.Printf("TPM-Tao:\n%v\n\n", tpm)
-	fmt.Printf("Root keys for attestation authority:\n%v\n\n", aa)
-	fmt.Printf("Delegate:\n%v\n\n", aasub)
+	verbose.Printf("TPM-Tao:\n%v\n\n", tpm)
+	verbose.Printf("Root keys for attestation authority:\n%v\n\n", aa)
+	verbose.Printf("Delegate:\n%v\n\n", aasub)
 
 	var stmt auth.Says
 	if *options.Bool["delegation"] {
@@ -103,16 +103,16 @@ func main() {
 		}
 	}
 
-	fmt.Printf("Statement:\n%v\n\n", stmt)
+	verbose.Printf("Statement:\n%v\n\n", stmt)
 
 	attestation, err := tao.GenerateAttestation(aaKeys.SigningKey, nil, stmt)
-	fmt.Printf("Attestation:\n%v\n\n", attestation)
+	verbose.Printf("Attestation:\n%v\n\n", attestation)
 
 	ser, err := proto.Marshal(attestation)
 	options.FailIf(err, "Can't serialize attestation")
 	err = util.WritePath(afile, ser, 0777, 0644)
 	options.FailIf(err, "Can't write attestation")
 
-	fmt.Printf("Attestation written to: %s\n", afile)
+	verbose.Printf("Attestation written to: %s\n", afile)
 
 }
