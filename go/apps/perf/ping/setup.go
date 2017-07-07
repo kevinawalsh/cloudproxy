@@ -436,7 +436,7 @@ func ReadWriteClose(conn io.ReadWriteCloser, getData func() (int64, int64, int64
 }
 
 func GetLocalTaoSharedSecret() []byte {
-	options.FailWhen(len(guard.PeerTails) == 0, "-peer_subprin is required")
+	options.FailWhen(len(PeerNames) == 0, "-peer_prins is required")
 
 	g := tao.NewACLGuard()
 
