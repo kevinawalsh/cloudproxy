@@ -81,6 +81,8 @@ var ResumeTLSSessions = flag.Bool("tls_resume", false, "Use TLS session resumpti
 
 var PingBufSize = flag.Int("buf", 24, "Ping Buffer Size")
 
+var Dump = flag.String("dump", "", "file for saving trace")
+
 type PrinFlags []auth.Prin
 
 func (f *PrinFlags) String() string {

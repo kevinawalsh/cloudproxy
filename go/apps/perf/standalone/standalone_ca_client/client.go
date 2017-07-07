@@ -62,4 +62,7 @@ func main() {
 	}
 
 	fmt.Println(T)
+	if ping.Dump != nil && *ping.Dump != "" {
+		T.Dump(*ping.Dump)
+	}
 }
