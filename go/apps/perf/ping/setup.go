@@ -15,6 +15,7 @@
 package ping
 
 import (
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -26,6 +27,7 @@ import (
 	"net"
 	"os"
 	"path"
+	"strings"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/jlmucb/cloudproxy/go/apps/perf/attested/guard"
@@ -78,6 +80,35 @@ var AppKAAddr string
 var ResumeTLSSessions = flag.Bool("tls_resume", false, "Use TLS session resumption")
 
 var PingBufSize = flag.Int("buf", 24, "Ping Buffer Size")
+
+type PrinFlags []auth.Prin
+
+func (f *PrinFlags) String() string {
+	var s []string
+	for _, p := range *f {
+		s = append(s, fmt.Sprintf("%v", p))
+	}
+	return strings.Join(s, ",")
+}
+
+func (f *PrinFlags) Set(value string) error {
+	buf := bytes.NewBufferString(value)
+	for buf.Len() > 0 {
+		var p auth.Prin
+		_, err := fmt.Fscan(buf, &p)
+		if err != nil {
+			return err
+		}
+		*f = append(*f, p)
+	}
+	return nil
+}
+
+var PeerNames PrinFlags
+
+func init() {
+	flag.Var(&PeerNames, "peer_prins", "Principal names for shared secret ACL")
+}
 
 var CertName = &pkix.Name{
 	Country:            []string{"US"},
@@ -409,18 +440,8 @@ func GetLocalTaoSharedSecret() []byte {
 
 	g := tao.NewACLGuard()
 
-	for _, p := range guard.PeerTails {
-		peer := auth.Prin{
-			Type:    TaoName.Type,
-			KeyHash: TaoName.KeyHash,
-			Ext:     nil,
-		}
-		peer.Ext = append(peer.Ext, TaoName.Ext[0:*NameBase]...)
-		peer.Ext = append(peer.Ext, p.Ext...)
+	for _, peer := range PeerNames {
 		g.Authorize(peer, "GetSharedSecret", nil)
-		// fmt.Printf("\nAuthorized: %v\n", peer)
-		// maybe also authorize all of the parents? Or, fix GetSharedSecret
-		// so that we can track original requester as it goes up the chain
 	}
 
 	sharedSecret, err := Parent.GetSharedSecret(nil, 30, g, *SharedSecretLevel)
