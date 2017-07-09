@@ -218,12 +218,39 @@ func GenerateKeysAndCertifyWithStandaloneAppCA(name *pkix.Name) *tao.Keys {
 	return keys
 }
 
+// From tao/keys.go, but with extra T.Sample() call.
+func NewTemporaryTaoDelegatedKeys(keyTypes tao.KeyType, name *pkix.Name, t tao.Tao) (*tao.Keys, error) {
+	k, err := tao.NewTemporaryNamedKeys(keyTypes, name)
+	T.Sample("genkey")
+	if err != nil {
+		return nil, err
+	}
+
+	if t != nil && k.SigningKey != nil {
+
+		self, err := t.GetTaoName()
+		if err != nil {
+			return nil, err
+		}
+
+		s := &auth.Speaksfor{
+			Delegate:  k.SigningKey.ToPrincipal(),
+			Delegator: self,
+		}
+		if k.Delegation, err = t.Attest(&self, nil, nil, s); err != nil {
+			return nil, err
+		}
+	}
+
+	return k, nil
+}
+
 func GenerateKeysWithAttestationGuard() (*tao.Keys, tao.Guard) {
 	g := guard.NewAttestationGuard()
-	keys, err := tao.NewTemporaryTaoDelegatedKeys(tao.Signing, nil, Parent)
+	keys, err := NewTemporaryTaoDelegatedKeys(tao.Signing, nil, Parent)
 	options.FailIf(err, "generating keys")
 	keys.Delegation.SerializedEndorsements = append(keys.Delegation.SerializedEndorsements, g.LocalSerializedTpmAttestation)
-	T.Sample("genkey")
+	T.Sample("attest")
 	return keys, g
 }
 
