@@ -87,15 +87,17 @@ func main() {
 		conn, err := tls.Dial("tcp", ping.ServerAddr, conf)
 		options.FailIf(err, "connecting")
 		t1 := T.Skip("srv_genkey")
-		t2 := T.Skip("srv_connect_psk_ka")
-		t3 := T.Skip("srv_obtain_psk")
+		t2 := T.Skip("srv_attest")
+		t3 := T.Skip("srv_connect_psk_ka")
+		t4 := T.Skip("srv_obtain_psk")
 		T.Sample("connect")
 
 		// send ping, recv pong, close conn
-		x, y, z := ping.WriteReadClose(conn)
-		*t1 = t1.Add(time.Duration(x))
-		*t2 = t1.Add(time.Duration(y))
-		*t3 = t2.Add(time.Duration(z))
+		w, x, y, z := ping.WriteReadClose(conn)
+		*t1 = t1.Add(time.Duration(w))
+		*t2 = t1.Add(time.Duration(x))
+		*t3 = t2.Add(time.Duration(y))
+		*t4 = t3.Add(time.Duration(z))
 
 		if *halfReconnect {
 
@@ -115,33 +117,38 @@ func main() {
 			conn, err := tls.Dial("tcp", ping.ServerAddr, conf)
 			options.FailIf(err, "connecting")
 			t1 := T.Skip("srv_genkey") // 0
-			t2 := T.Skip("srv_connect_psk_ka")
-			t3 := T.Skip("srv_obtain_psk")
+			t2 := T.Skip("srv_attest") // 0
+			t3 := T.Skip("srv_connect_psk_ka")
+			t4 := T.Skip("srv_obtain_psk")
 			T.Sample("connect")
 
 			// send ping, recv pong, close conn
-			x, y, z := ping.WriteReadClose(conn)
-			*t1 = t1.Add(time.Duration(x))
-			*t2 = t1.Add(time.Duration(y))
-			*t3 = t2.Add(time.Duration(z))
+			w, x, y, z := ping.WriteReadClose(conn)
+			*t1 = t1.Add(time.Duration(w))
+			*t2 = t1.Add(time.Duration(x))
+			*t3 = t2.Add(time.Duration(y))
+			*t4 = t3.Add(time.Duration(z))
 
 		} else if *reconnect {
 			// re-open connection
 			T.Skip("genkey")
+			T.Skip("attest")
 			T.Skip("connect psk ka")
 			T.Skip("obtain psk")
 			conn, err := tls.Dial("tcp", ping.ServerAddr, conf)
 			options.FailIf(err, "connecting")
 			t1 := T.Skip("srv_genkey")         // 0
-			t2 := T.Skip("srv_connect_psk_ka") // 0
-			t3 := T.Skip("srv_obtain_psk")     // 0
+			t2 := T.Skip("srv_attest")         // 0
+			t3 := T.Skip("srv_connect_psk_ka") // 0
+			t4 := T.Skip("srv_obtain_psk")     // 0
 			T.Sample("reconnect")
 
 			// re-send ping, recv pong, close conn
-			x, y, z := ping.WriteReadClose(conn)
-			*t1 = t1.Add(time.Duration(x))
-			*t2 = t1.Add(time.Duration(y))
-			*t3 = t2.Add(time.Duration(z))
+			w, x, y, z := ping.WriteReadClose(conn)
+			*t1 = t1.Add(time.Duration(w))
+			*t2 = t1.Add(time.Duration(x))
+			*t3 = t2.Add(time.Duration(y))
+			*t4 = t3.Add(time.Duration(z))
 		}
 	}
 

@@ -79,7 +79,7 @@ var AppKAAddr string
 
 var ResumeTLSSessions = flag.Bool("tls_resume", false, "Use TLS session resumption")
 
-var PingBufSize = flag.Int("buf", 24, "Ping Buffer Size")
+var PingBufSize = flag.Int("buf", 32, "Ping Buffer Size")
 
 var Dump = flag.String("dump", "", "file for saving trace")
 
@@ -420,7 +420,7 @@ func ObtainAnotherPreSharedKeyFromKA() []byte {
 	return resp.KeyMaterial
 }
 
-func WriteReadClose(conn io.ReadWriteCloser) (x int64, y int64, z int64) {
+func WriteReadClose(conn io.ReadWriteCloser) (w, x, y, z int64) {
 	// send ping
 	buf := make([]byte, *PingBufSize)
 
@@ -437,26 +437,28 @@ func WriteReadClose(conn io.ReadWriteCloser) (x int64, y int64, z int64) {
 	err = conn.Close()
 	options.FailIf(err, "closing")
 
-	x = int64(binary.LittleEndian.Uint64(buf[0:8]))
-	y = int64(binary.LittleEndian.Uint64(buf[8:16]))
-	z = int64(binary.LittleEndian.Uint64(buf[16:24]))
-	return x, y, z
+	w = int64(binary.LittleEndian.Uint64(buf[0:8]))
+	x = int64(binary.LittleEndian.Uint64(buf[8:16]))
+	y = int64(binary.LittleEndian.Uint64(buf[16:24]))
+	z = int64(binary.LittleEndian.Uint64(buf[24:32]))
+	return w, x, y, z
 }
 
-func ReadWriteClose(conn io.ReadWriteCloser, getData func() (int64, int64, int64)) {
+func ReadWriteClose(conn io.ReadWriteCloser, getData func() (int64, int64, int64, int64)) {
 	// recv ping
 	buf := make([]byte, *PingBufSize)
 	n, err := conn.Read(buf[:])
 	options.FailWhen(n != *PingBufSize, "bad ping: len=%d\n", n)
 
 	// send pong
-	var x, y, z int64
+	var w, x, y, z int64
 	if getData != nil {
-		x, y, z = getData()
+		w, x, y, z = getData()
 	}
-	binary.LittleEndian.PutUint64(buf[0:8], uint64(x))
-	binary.LittleEndian.PutUint64(buf[8:16], uint64(y))
-	binary.LittleEndian.PutUint64(buf[16:24], uint64(z))
+	binary.LittleEndian.PutUint64(buf[0:8], uint64(w))
+	binary.LittleEndian.PutUint64(buf[8:16], uint64(x))
+	binary.LittleEndian.PutUint64(buf[16:24], uint64(y))
+	binary.LittleEndian.PutUint64(buf[24:32], uint64(z))
 	_, err = conn.Write(buf[:])
 	options.FailIf(err, "writing")
 

@@ -78,11 +78,13 @@ func main() {
 		conn, err := tls.Dial("tcp", ping.ServerAddr, conf)
 		options.FailIf(err, "connecting")
 		t1 := T.Skip("srv_get_psk")
+		t2 := T.Skip("srv_attest")
 		T.Sample("connect")
 
 		// send ping, recv pong, close conn
-		x, _, _ := ping.WriteReadClose(conn)
-		*t1 = t1.Add(time.Duration(x))
+		w, x, _, _ := ping.WriteReadClose(conn)
+		*t1 = t1.Add(time.Duration(w))
+		*t2 = t1.Add(time.Duration(x))
 
 		if *reconnect {
 			// re-open connection
@@ -90,11 +92,13 @@ func main() {
 			conn, err := tls.Dial("tcp", ping.ServerAddr, conf)
 			options.FailIf(err, "connecting")
 			t1 := T.Skip("srv_get_psk") // 0
+			t2 := T.Skip("srv_attest")  // 0
 			T.Sample("reconnect")
 
 			// re-send ping, recv pong, close conn
-			x, _, _ := ping.WriteReadClose(conn)
-			*t1 = t1.Add(time.Duration(x))
+			w, x, _, _ := ping.WriteReadClose(conn)
+			*t1 = t1.Add(time.Duration(w))
+			*t2 = t1.Add(time.Duration(x))
 		}
 	}
 

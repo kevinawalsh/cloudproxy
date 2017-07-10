@@ -88,14 +88,15 @@ func main() {
 
 		// recv ping, send pong, close conn
 		// ping.ReadWriteClose(conn, func() (int64, int64) { return int64(durationGetKey), 0 })
-		ping.ReadWriteClose(conn, func() (int64, int64, int64) {
+		ping.ReadWriteClose(conn, func() (int64, int64, int64, int64) {
 			// fmt.Printf("Trace has %d samples, %d columns, %d repeats\n", T.N, T.Points, T.Repeats)
-			var w, x time.Time
-			if T.N == 2 {
-				w = T.Samples[T.N-2]
-				x = T.Samples[T.N-1]
+			var w, x, y time.Time
+			if T.N == 3 {
+				w = T.Samples[T.N-3]
+				x = T.Samples[T.N-2]
+				y = T.Samples[T.N-1]
 			}
-			return int64(x.Sub(w)), 0, 0
+			return int64(x.Sub(w)), int64(y.Sub(x)), 0, 0
 		})
 	}
 }
