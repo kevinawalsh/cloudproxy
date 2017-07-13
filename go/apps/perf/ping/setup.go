@@ -150,20 +150,20 @@ func ParseFlags(requiresTao bool) {
 
 	exit := false
 	if *ShowName {
-		fmt.Printf("%s\n", TaoName)
+		fmt.Printf("%v\n", TaoName)
 		exit = true
 	}
 	if *ShowSubprin {
-		fmt.Printf("%s\n", TaoTail)
+		fmt.Printf("%v\n", TaoTail)
 		exit = true
 	}
 	if SaveName != nil && *SaveName != "" {
-		err := ioutil.WriteFile(*SaveName, []byte(fmt.Sprintf("%s\n", TaoName)), 0666)
+		err := ioutil.WriteFile(*SaveName, []byte(fmt.Sprintf("%v\n", TaoName)), 0666)
 		options.FailIf(err, "can't write file")
 		exit = true
 	}
 	if SaveSubprin != nil && *SaveSubprin != "" {
-		err := ioutil.WriteFile(*SaveSubprin, []byte(fmt.Sprintf("%s\n", TaoTail)), 0666)
+		err := ioutil.WriteFile(*SaveSubprin, []byte(fmt.Sprintf("%v\n", TaoTail)), 0666)
 		options.FailIf(err, "can't write file")
 		exit = true
 	}

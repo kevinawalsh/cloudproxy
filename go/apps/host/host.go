@@ -195,10 +195,10 @@ func configureFromOptions(cfg *tao.LinuxHostConfig) {
 		keys = append(keys, "signing")
 	}
 	if *options.Bool["crypting_key"] {
-		keys = append(keys, "signing")
+		keys = append(keys, "crypting")
 	}
-	if *options.Bool["signing_key"] {
-		keys = append(keys, "signing")
+	if *options.Bool["deriving_key"] {
+		keys = append(keys, "deriving")
 	}
 	cfg.Keys = keys
 }
