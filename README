@@ -1,5 +1,9 @@
-This directory contains a fork of the source code and design material for the 
-CloudProxy Project, modified to support experiments for the following paper:
+This directory contains a fork of the source code and design documents for the
+CloudProxy Project, modified to support experiments for the following papers:
+
+    Mechanisms for Mutual Attested Microservice Communication. Kevin Walsh and
+    John Manferdelli. To appear in the International Workshop on Clouds and
+    (eScience) Applications Management (CloudAM'2017), December 2017.
 
     TLS with Trustworthy Certificate Authorities. Kevin Walsh.
     In IEEE Workshop on Security and Privacy in the Cloud, October 2016.

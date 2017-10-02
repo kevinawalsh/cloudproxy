@@ -1,0 +1,8 @@
+The scripts in this directory are meant to serve as initial examples of how to
+run communicating Tao-hosted proceses and microservices in a variety of
+configurations, including on the local host, on local machines, or on GCE, AWS,
+or other cloud platforms.
+
+These scripts are not general-purpose, and will need to be edited heavily to
+match the specific deployment configuration. Further documentation and more
+general scripts may be added here in the future.
